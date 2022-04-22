@@ -1,4 +1,5 @@
 import os
+
 import torch
 import sys
 
@@ -9,8 +10,8 @@ from albumentations import (
     Transpose,
     RandomBrightnessContrast,
 )
-import horovod.torch as hvd
 from math import ceil
+
 import pandas as pd
 from pathlib import Path
 from pathaia.util.paths import get_files
@@ -22,7 +23,7 @@ from torchmetrics import JaccardIndex, Precision, Recall, Specificity, Accuracy
 from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 
-from src import models, data_loader, pl_modules, losses
+from src import models, data_loader, pl_modules, losses, utils
 
 
 parser = ArgumentParser(
@@ -40,17 +41,13 @@ parser.add_argument(
     required=True,
 )
 
+
 parser.add_argument(
-    "--patch-csv-folder",
-    type=Path,
-    help="Input folder containing PathAIA csv files.",
-    required=True,
-)
-parser.add_argument(
-    "--slidefolder",
+    "--slide-file",
+    default="/data/DeepLearning/mehdi/csv/luminal_data_split.csv",
     type=Path,
     help="Input folder containing svs slide files.",
-    required=True,
+    # required=True,
 )
 # parser.add_argument(
 #     "--maskfolder",
@@ -58,14 +55,7 @@ parser.add_argument(
 #     help="Input folder containing tif mask files.",
 #     required=True,
 # )
-parser.add_argument(
-    "--stain-matrices-folder",
-    type=Path,
-    help=(
-        "Input folder containing npy stain matrices files for stain augmentation. "
-        "Optional."
-    ),
-)
+
 
 parser.add_argument(
     "--loss",
@@ -76,17 +66,13 @@ parser.add_argument(
     ),
 )
 
-parser.add_argument(
-    "--split-csv",
-    type=Path,
-    help="Input csv file for dataset split containing 2 columns: slide and split.",
-    required=True,
-)
+
 parser.add_argument(
     "--logfolder",
     type=Path,
+    default="/data/DeepLearning/mehdi/log",
     help="Output folder for pytorch lightning log files.",
-    required=True,
+    # required=True,
 )
 parser.add_argument(
     "--gpu",
@@ -96,7 +82,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--horovod",
-    action="store_true",
+    action="store_false",
     help="Specify when using script with horovodrun. Optional.",
 )
 parser.add_argument(
@@ -129,7 +115,7 @@ parser.add_argument(
 parser.add_argument(
     "--num-workers",
     type=int,
-    default=0,
+    default=4,
     help="Number of workers to use for data loading. Default 0 (only main process).",
 )
 parser.add_argument(
@@ -162,11 +148,6 @@ parser.add_argument(
         "variable. Optional."
     ),
 )
-parser.add_argument(
-    "--augment-stain",
-    action="store_true",
-    help="Specify to use stain augmentation. Optional.",
-)
 
 
 def _collate_fn(batch):
@@ -181,22 +162,10 @@ def _collate_fn(batch):
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    if args.horovod:
-        hvd.init()
+    # if args.horovod:
+    #     hvd.init()
 
     seed_everything(workers=True)
-
-    patches_paths = get_files(
-        args.patch_csv_folder, extensions=".csv", recurse=False
-    ).sorted(key=lambda x: x.stem)
-
-    slide_paths = mask_paths.map(
-        lambda x: args.slidefolder / x.with_suffix(".svs").name
-    )
-
-    split_df = pd.read_csv(args.split_csv).sort_values("slide")
-    train_idxs = (split_df["split"] == "train").values
-    val_idxs = ~train_idxs
 
     # if args.stain_matrices_folder is not None:
     #     stain_matrices_paths = mask_paths.map(
@@ -213,42 +182,41 @@ if __name__ == "__main__":
         RandomBrightnessContrast(),
         ToTensor(),
     ]
-    train_ds = data_loader.ClassificationDataset(
-        slide_paths[train_idxs],
-        patches_paths[train_idxs],
-        # stain_augmentor=StainAugmentor() if args.augment_stain else None,
-        transforms=transforms,
-    )
-    val_ds = data_loader.ClassificationDataset(
-        slide_paths[val_idxs],
-        patches_paths[val_idxs],
-        transforms=[
-            ToTensor(),
-        ],
-    )
+    print("########################## dataset ##########################")
+    train_ds = data_loader.ClassificationDataset(args.slide_file)
+    val_ds = data_loader.ClassificationDataset(args.slide_file, split="valid")
 
-    sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
-
+    # sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
+    print("########################## loader ##########################")
     train_dl = DataLoader(
         train_ds,
         batch_size=args.batch_size,
-        pin_memory=True,
         num_workers=args.num_workers,
-        drop_last=True,
-        sampler=sampler,
-        collate_fn=_collate_fn,
-        persistent_workers=True,
     )
-    val_dl = DataLoader(
-        val_ds,
-        batch_size=args.batch_size,
-        shuffle=False,
-        pin_memory=True,
-        num_workers=args.num_workers,
-        collate_fn=_collate_fn,
-        persistent_workers=True,
-    )
+    # train_dl = DataLoader(
+    #     train_ds,
+    #     batch_size=args.batch_size,
+    #     pin_memory=True,
+    #     num_workers=args.num_workers,
+    #     drop_last=True,
+    #     sampler=sampler,
+    #     collate_fn=_collate_fn,
+    #     persistent_workers=True,
+    # )
+    # val_dl = DataLoader(
+    #     val_ds,
+    #     batch_size=args.batch_size,
+    #     shuffle=False,
+    #     pin_memory=True,
+    #     num_workers=args.num_workers,
+    #     collate_fn=_collate_fn,
+    #     persistent_workers=True,
+    # )
 
+    val_dl = DataLoader(
+        train_ds, batch_size=args.batch_size, num_workers=args.num_workers
+    )
+    print("loaded")
     scheduler_func = pl_modules.get_scheduler_func(
         args.scheduler,
         total_steps=ceil(len(train_dl) / (args.grad_accumulation)) * args.epochs,
@@ -265,7 +233,7 @@ if __name__ == "__main__":
         wd=args.wd,
         loss=losses.get_loss(args.loss),
         scheduler_func=scheduler_func,
-        seg_metrics=[
+        metrics=[
             Accuracy(),
             Precision(),
             Recall(),
@@ -273,45 +241,23 @@ if __name__ == "__main__":
         ],
     )
 
+    logfolder = args.logfolder / "luninal/"
+    logdir = utils.generate_unique_logpath(logfolder, args.model)
+    print("Logging to {}".format(logdir))
+    if not os.path.exists(logdir):
+        os.mkdir(logdir)
+    if not os.path.exists(logdir):
+        os.mkdir(logdir)
     logger = CometLogger(
         api_key=os.environ["COMET_API_KEY"],
-        workspace="apriorics", # changer nom du compte 
-        save_dir=args.logfolder,# dossier du log local data nom du compte 
-        project_name="apriorics",# changer nom  
+        workspace="mehdiec",  # changer nom du compte
+        save_dir=logdir,  # dossier du log local data nom du compte
+        project_name="luninal",  # changer nom
         auto_metric_logging=False,
     )
-    logdir = args.logfolder / f"apriorics/{args.resume_version}/"
-    summary_file = open(logdir + "/summary.txt", "w")
-    summary_text = """
-    Executed command
-    ===============
-    {}
-    Dataset
-    =======
-    Train transform : {}
-    Normalization : {}
-    Model summary
-    =============
-    {}
-    {} trainable parameters
-    Optimizer
-    ========
-    {}
-    """.format(
-        " ".join(sys.argv),
-        transforms,
-        args.normalize,
-        str(models).replace("\n", "\n\t"),
-        sum(p.numel() for p in models.parameters() if p.requires_grad),
-        "",  # str(optimizer).replace("\n", "\n\t"),
-    )
-    summary_file.write(summary_text)
-    summary_file.close()
 
-    logger.experiment.log_text(summary_text)
-
-    if not args.horovod or hvd.rank() == 0:
-        logger.experiment.add_tag(args.ihc_type)
+    # if not args.horovod or hvd.rank() == 0:
+    #     logger.experiment.add_tag(args.ihc_type)
 
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
@@ -329,12 +275,12 @@ if __name__ == "__main__":
         precision=16,
         accumulate_grad_batches=args.grad_accumulation,
         callbacks=[ckpt_callback],
-        strategy="horovod" if args.horovod else None,
+        # strategy="horovod" if args.horovod else None,
     )
 
     if args.resume_version is not None:
         ckpt_path = (
-            args.logfolder / f"apriorics/{args.resume_version}/checkpoints/last.ckpt"
+            args.logfolder / f"luninal/{args.resume_version}/checkpoints/last.ckpt"
         )
         checkpoint = torch.load(ckpt_path)
         missing, unexpected = plmodule.load_state_dict(
