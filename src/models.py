@@ -8,7 +8,7 @@ import timm
 from nptyping import NDArray
 
 
-def build_model(model_name, img_size, num_classes):
+def build_model(model_name, num_classes):
     model = None
 
     if model_name == "resnet":
