@@ -12,13 +12,10 @@ from torch.optim.lr_scheduler import (
 )
 from torchvision.utils import make_grid, draw_bounding_boxes, draw_segmentation_masks
 from torchvision.transforms.functional import to_pil_image
-from torchmetrics import Metric
+from torchmetrics import Metric, MetricCollection
 from pathaia.util.basic import ifnone
 
-from apriorics.losses import get_loss_name
-from apriorics.metrics import MetricCollection
-from apriorics.model_components.utils import named_leaf_modules
-from matplotlib.cm import rainbow
+from src.losses import get_loss_name
 
 
 def get_scheduler_func(
