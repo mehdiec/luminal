@@ -275,9 +275,9 @@ if __name__ == "__main__":
 
     logger = CometLogger(
         api_key=os.environ["COMET_API_KEY"],
-        workspace="apriorics",
-        save_dir=args.logfolder,
-        project_name="apriorics",
+        workspace="apriorics", # changer nom du compte 
+        save_dir=args.logfolder,# dossier du log local data nom du compte 
+        project_name="apriorics",# changer nom  
         auto_metric_logging=False,
     )
     logdir = args.logfolder / f"apriorics/{args.resume_version}/"

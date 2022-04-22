@@ -99,7 +99,7 @@ class ClassificationDataset(Dataset):
                 reader = csv.DictReader(patch_file)
                 for patch in reader:
                     self.patches.append(Patch.from_csv_row(patch))
-                    self.n_pos.append(patch["n_pos"])
+                    # self.n_pos.append(patch["n_pos"])
                     self.slide_idxs.append(slide_idx)
 
         self.n_pos = np.array(self.n_pos, dtype=np.uint64)
