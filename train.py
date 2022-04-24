@@ -1,5 +1,5 @@
 import os
-
+import comet_ml
 import torch
 import sys
 import yaml
@@ -59,6 +59,10 @@ args = parser.parse_args()
 #         "variable. Optional."
 #     ),
 # )
+experiment = comet_ml.Experiment(
+    api_key="57zOARA0d8ftliPTpL3pXTeVc",
+    project_name="luminal",
+)
 
 
 def _collate_fn(batch):
