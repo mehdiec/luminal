@@ -1,4 +1,4 @@
-model: resnet #["resnet"]
+model: vanilla #[vanilla,"resnet"]
 slide_file: /data/DeepLearning/mehdi/csv/luminal_data_split.csv
 loss: bce
 logfolder: /data/DeepLearning/mehdi/log"
