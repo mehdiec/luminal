@@ -96,10 +96,8 @@ class BasicClassificationModule(pl.LightningModule):
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         x, y = batch
         y_hat = self(x)
-        loss = self.loss(y_hat, y)
 
-        print(y)
-        print(y_hat)
+        loss = self.loss(y_hat, y.float())
 
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
         if self.sched is not None:
@@ -111,9 +109,8 @@ class BasicClassificationModule(pl.LightningModule):
     ):
         x, y = batch
         y_hat = self(x)
-        print(y.unsqueeze(1))
-        print(y_hat)
-        # loss = self.loss(y_hat, y.unsqueeze(2))
+
+        loss = self.loss(y_hat, y.float())
         self.log(f"val_loss_{get_loss_name(self.loss)}", loss, sync_dist=True)
 
         y_hat = torch.sigmoid(y_hat)

@@ -48,7 +48,6 @@ class VanillaCNN(nn.Module):
         )
 
     def forward(self, x):
-        print(x.shape)
         x = self.features(x)
         x = x.view(x.size()[0], -1)  #  OR  x = x.view(-1, self.num_features)
         y = self.classifier(x)

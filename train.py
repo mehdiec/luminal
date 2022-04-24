@@ -140,7 +140,7 @@ def main(cfg, path_to_cfg=""):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model, loss, optimizer
-    model = models.build_model(cfg["model"], 2)
+    model = models.build_model(cfg["model"], 1)
 
     plmodule = pl_modules.BasicClassificationModule(
         model,

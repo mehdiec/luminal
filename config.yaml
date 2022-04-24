@@ -11,6 +11,6 @@ epochs: 10
 patch_size: 1024
 num_workers: 4
 group_norm: False
-scheduler: reduce-on-plateau #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
+scheduler: one-cycle #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
 grad_accumulation: 1
 transform: False
