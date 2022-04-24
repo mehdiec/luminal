@@ -98,6 +98,9 @@ class BasicClassificationModule(pl.LightningModule):
         y_hat = self(x)
         loss = self.loss(y_hat, y)
 
+        print(y)
+        print(y_hat)
+
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
         if self.sched is not None:
             self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
@@ -108,7 +111,9 @@ class BasicClassificationModule(pl.LightningModule):
     ):
         x, y = batch
         y_hat = self(x)
-        loss = self.loss(y_hat, y)
+        print(y.unsqueeze(1))
+        print(y_hat)
+        # loss = self.loss(y_hat, y.unsqueeze(2))
         self.log(f"val_loss_{get_loss_name(self.loss)}", loss, sync_dist=True)
 
         y_hat = torch.sigmoid(y_hat)

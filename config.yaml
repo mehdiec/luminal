@@ -1,16 +1,16 @@
 model: vanilla #[vanilla,"resnet"]
 slide_file: /data/DeepLearning/mehdi/csv/luminal_data_split.csv
 loss: bce
-logfolder: /data/DeepLearning/mehdi/log"
+logfolder: /data/DeepLearning/mehdi/log
 gpu: 0
 horovod: False
 batch_size: 8
-lr:
+lr: 0.0001
 wd: 0.001
 epochs: 10
 patch_size: 1024
-num_worker: 4
-group_norm: True
+num_workers: 4
+group_norm: False
 scheduler: reduce-on-plateau #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
 grad_accumulation: 1
-transforms: True
+transform: False
