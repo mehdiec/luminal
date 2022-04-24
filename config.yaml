@@ -1,72 +1,16 @@
-DATA_DIR: '../data'
-OUTPUT_DIR: '../models'
-DATASET:
-  DATA_FORMAT: csv
-  PREPROCESSING:
-    NORMALIZE:
-      ACTIVE: False
-      TYPE: "StandardScaler"  # ["MinMaxScalar", "StandardScaler"]
-    PCA:
-      ACTIVE: False
-      N_COMPONENTS: 0.95
-  BATCH_SIZE: 64
-  VALID_RATIO: 0.15
-  VERBOSITY: True
-  NUM_THREADS: 4
-MODELS:
-  NN: False
-  ML:
-    ACTIVE: True
-    GRID_SEARCH: False
-    BAYESIAN_OPT: False
-    BAYESIAN_ITERATIONS: 20
-    TYPE: 'RandomForest'  # ["RandomForest", "ExtraTrees", "Knn", "NuSVR", "GradientBoosting"]
-    RandomForest:
-      bootstrap: False
-      max_depth: 14
-      max_features: 30
-      min_samples_split: 6
-      n_estimators: 90
-      n_jobs: -1
-    ExtraTrees:
-      bootstrap: False
-      max_depth: 18
-      max_features: 30
-      min_samples_split: 4
-      n_estimators: 90
-      n_jobs: -1
-    Knn:
-      n_neighbors: 9
-    NuSVR:
-      C: 0.7
-      gamma: 0.009
-      kernel: 'rbf'
-      nu: 0.6
-    GradientBoosting:
-      loss: 'squared_error'
-      criterion: 'squared_error'
-      max_depth: 26
-      max_features: 50
-      min_samples_leaf: 4
-      min_samples_split: 6
-      n_estimators: 110
-TRAIN:
-  EPOCH: 100
-  CHECKPOINT_STEP: 500
-  MODEL: LinearNet_1
-  LOG_DIR: 'tensorboard/metrics/linear_1'
-  SAVE_DIR: '../models'
-  LR_INITIAL : 0.001
-  LR_DECAY: 0.001
-  LR_PATIENCE : 5
-  LR_THRESHOLD : 0.01
-TEST:
-  BATCH_SIZE: 64
-  PATH_TO_MODEL: '../models/randomforest_0/model.pck'
-  PATH_TO_CSV: './output.csv'
-  AVERAGE:
-    ACTIVE: True
-    PATH:
-      - {MODEL: '../models/randomforest_0/model.pck', CONFIG: '../models/randomforest_0/config_file.yaml'}
-      - {MODEL: '../models/extratrees_0/model.pck', CONFIG: '../models/extratrees_0/config_file.yaml'}
-      - {MODEL: '../models/nusvr_0/model.pck', CONFIG: '../models/nusvr_0/config_file.yaml'}
+model: resnet #["resnet"]
+slide_file: /data/DeepLearning/mehdi/csv/luminal_data_split.csv
+loss: bce
+logfolder: /data/DeepLearning/mehdi/log"
+gpu: 0
+horovod: False
+batch_size: 8
+lr:
+wd: 0.001
+epochs: 10
+patch_size: 1024
+num_worker: 4
+group_norm: True
+scheduler: reduce-on-plateau #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
+grad_accumulation: 1
+transforms: True

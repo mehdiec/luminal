@@ -2,8 +2,8 @@ import os
 
 import torch
 import sys
-
-from argparse import ArgumentParser
+import yaml
+import argparse
 from albumentations import (
     RandomRotate90,
     Flip,
@@ -25,30 +25,21 @@ from torchvision.transforms import ToTensor
 
 from src import models, data_loader, pl_modules, losses, utils
 
+# Init the parser
+parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 
-parser = ArgumentParser(
-    prog=(
-        "Train a detection model for a specific IHC (PHH3). To train on multiple gpus, "
-        "should be called as `horovodrun -np n_gpus python train_detection.py "
-        "--horovod`."
-    )
-)
-
+seed_everything(workers=True)
+# Add path to the config file to the command line arguments
 parser.add_argument(
-    "--model",
-    choices=["resnet"],
-    action="store",
+    "--path_to_config",
+    type=str,
     required=True,
+    default="./config.yaml",
+    help="path to config file",
 )
+args = parser.parse_args()
 
 
-parser.add_argument(
-    "--slide-file",
-    default="/data/DeepLearning/mehdi/csv/luminal_data_split.csv",
-    type=Path,
-    help="Input folder containing svs slide files.",
-    # required=True,
-)
 # parser.add_argument(
 #     "--maskfolder",
 #     type=Path,
@@ -57,97 +48,17 @@ parser.add_argument(
 # )
 
 
-parser.add_argument(
-    "--loss",
-    default="bce",
-    help=(
-        "Loss function to use for training. Must be one of bce, focal, dice, "
-        "sum_loss1_coef1_****. Default bce."
-    ),
-)
-
-
-parser.add_argument(
-    "--logfolder",
-    type=Path,
-    default="/data/DeepLearning/mehdi/log",
-    help="Output folder for pytorch lightning log files.",
-    # required=True,
-)
-parser.add_argument(
-    "--gpu",
-    type=int,
-    default=0,
-    help="GPU index to used when not using horovod. Default 0.",
-)
-parser.add_argument(
-    "--horovod",
-    action="store_false",
-    help="Specify when using script with horovodrun. Optional.",
-)
-parser.add_argument(
-    "--batch-size",
-    type=int,
-    default=8,
-    help=(
-        "Batch size for training. effective batch size is multiplied by the number of"
-        " gpus. Default 8."
-    ),
-)
-parser.add_argument(
-    "--lr", type=float, default=1e-3, help="Learning rate for training. Default 1e-3."
-)
-parser.add_argument(
-    "--wd",
-    type=float,
-    default=1e-2,
-    help="Weight decay for AdamW optimizer. Default 1e-2.",
-)
-parser.add_argument(
-    "--epochs", type=int, default=10, help="Number of epochs to train on. Default 10."
-)
-parser.add_argument(
-    "--patch-size",
-    type=int,
-    default=1024,
-    help="Size of the patches used foor training. Default 1024.",
-)
-parser.add_argument(
-    "--num-workers",
-    type=int,
-    default=4,
-    help="Number of workers to use for data loading. Default 0 (only main process).",
-)
-parser.add_argument(
-    "--group-norm",
-    action="store_true",
-    help="Specify to use group norm instead of batch norm in model. Optional.",
-)
-parser.add_argument(
-    "--scheduler",
-    choices=["one-cycle", "cosine-anneal", "reduce-on-plateau"],
-    help=(
-        "Learning rate scheduler to use during training. Must be one of one-cycle, "
-        "cosine-anneal, reduce-on-plateau. Optional."
-    ),
-)
-parser.add_argument(
-    "--grad-accumulation",
-    type=int,
-    default=1,
-    help="Number of batches to accumulate gradients on. Default 1.",
-)
-parser.add_argument(
-    "--resume-version", help="Version id of a model to load weights from. Optional."
-)
-parser.add_argument(
-    "--seed",
-    type=int,
-    help=(
-        "Specify seed for RNG. Can also be set using PL_GLOBAL_SEED environment "
-        "variable. Optional."
-    ),
-)
+# parser.add_argument(
+#     "--resume-version", help="Version id of a model to load weights from. Optional."
+# )
+# parser.add_argument(
+#     "--seed",
+#     type=int,
+#     help=(
+#         "Specify seed for RNG. Can also be set using PL_GLOBAL_SEED environment "
+#         "variable. Optional."
+#     ),
+# )
 
 
 def _collate_fn(batch):
@@ -159,9 +70,7 @@ def _collate_fn(batch):
     return xs, ys
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-
+def main(cfg, path_to_cfg):
     # if args.horovod:
     #     hvd.init()
 
@@ -174,24 +83,29 @@ if __name__ == "__main__":
     #     stain_matrices_paths = stain_matrices_paths[train_idxs]
     # else:
     #     stain_matrices_paths = None
-
-    transforms = [
-        Flip(),
-        Transpose(),
-        RandomRotate90(),
-        RandomBrightnessContrast(),
-        ToTensor(),
-    ]
+    transforms = None
+    if cfg["transform"]:
+        transforms = [
+            Flip(),
+            Transpose(),
+            RandomRotate90(),
+            RandomBrightnessContrast(),
+            ToTensor(),
+        ]
     print("########################## dataset ##########################")
-    train_ds = data_loader.ClassificationDataset(args.slide_file)
-    val_ds = data_loader.ClassificationDataset(args.slide_file, split="valid")
+    train_ds = data_loader.ClassificationDataset(
+        cfg["slide_file"], transforms=transforms
+    )
+    val_ds = data_loader.ClassificationDataset(
+        cfg["slide_file"], split="valid", transforms=transforms
+    )
 
     # sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
     print("########################## loader ##########################")
     train_dl = DataLoader(
         train_ds,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["num_workers"],
     )
     # train_dl = DataLoader(
     #     train_ds,
@@ -214,13 +128,13 @@ if __name__ == "__main__":
     # )
 
     val_dl = DataLoader(
-        train_ds, batch_size=args.batch_size, num_workers=args.num_workers
+        train_ds, batch_size=cfg["batch_size"], num_workers=cfg["num_workers"]
     )
     print("loaded")
     scheduler_func = pl_modules.get_scheduler_func(
-        args.scheduler,
-        total_steps=ceil(len(train_dl) / (args.grad_accumulation)) * args.epochs,
-        lr=args.lr,
+        cfg["scheduler"],
+        total_steps=ceil(len(train_dl) / (cfg["grad_accumulation"])) * cfg["epochs"],
+        lr=cfg["lr"],
     )
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
@@ -229,9 +143,9 @@ if __name__ == "__main__":
 
     plmodule = pl_modules.BasicClassificationModule(
         model,
-        lr=args.lr,
-        wd=args.wd,
-        loss=losses.get_loss(args.loss),
+        lr=cfg["lr"],
+        wd=cfg["wd"],
+        loss=losses.get_loss(cfg["loss"]),
         scheduler_func=scheduler_func,
         metrics=[
             Accuracy(),
@@ -240,9 +154,9 @@ if __name__ == "__main__":
             Specificity(),
         ],
     )
-
-    logfolder = args.logfolder / "luninal/"
-    logdir = utils.generate_unique_logpath(logfolder, args.model)
+    logfolder_temp = Path(cfg["logfolder"])
+    logfolder = logfolder_temp / "luninal/"  # Path
+    logdir = utils.generate_unique_logpath(logfolder, cfg["model"])
     print("Logging to {}".format(logdir))
     if not os.path.exists(logdir):
         os.mkdir(logdir)
@@ -258,37 +172,45 @@ if __name__ == "__main__":
 
     # if not args.horovod or hvd.rank() == 0:
     #     logger.experiment.add_tag(args.ihc_type)
-
+    loss = cfg["loss"]
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
-        monitor=f"val_loss_{args.loss}",
+        monitor=f"val_loss_{loss}",
         save_last=True,
         mode="min",
-        filename=f"{{epoch}}-{{val_loss_{args.loss}:.3f}}",
+        filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
 
     trainer = pl.Trainer(
-        gpus=1 if args.horovod else [args.gpu],
-        min_epochs=args.epochs,
-        max_epochs=args.epochs,
+        gpus=1 if cfg["horovod"] else [cfg["gpu"]],
+        min_epochs=cfg["epochs"],
+        max_epochs=cfg["epochs"],
         logger=logger,
         precision=16,
-        accumulate_grad_batches=args.grad_accumulation,
+        accumulate_grad_batches=cfg["grad_accumulation"],
         callbacks=[ckpt_callback],
         # strategy="horovod" if args.horovod else None,
     )
 
-    if args.resume_version is not None:
-        ckpt_path = (
-            args.logfolder / f"luninal/{args.resume_version}/checkpoints/last.ckpt"
-        )
-        checkpoint = torch.load(ckpt_path)
-        missing, unexpected = plmodule.load_state_dict(
-            checkpoint["state_dict"], strict=False
-        )
+    # if cfg["resume_version"]  is not None:
+    #     ckpt_path = (
+    #         cfg["logfolder"]   / f"luninal/{cfg["resume_version"]}/checkpoints/last.ckpt" #Pqth
+    #     )
+    #     checkpoint = torch.load(ckpt_path)
+    #     missing, unexpected = plmodule.load_state_dict(
+    #         checkpoint["state_dict"], strict=False
+    #     )
     trainer.fit(
         plmodule,
         train_dataloaders=train_dl,
         val_dataloaders=val_dl,
         # ckpt_path=ckpt_path,
     )
+
+
+if __name__ == "__main__":
+
+    with open(args.path_to_config, "r") as ymlfile:
+        config_file = yaml.load(ymlfile, Loader=yaml.Loader)
+
+    main(cfg=config_file)
