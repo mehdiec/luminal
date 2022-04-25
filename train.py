@@ -21,7 +21,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.utilities.seed import seed_everything
 from torchmetrics import JaccardIndex, Precision, Recall, Specificity, Accuracy
 from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor
+from src.transform import ToTensor
 
 from src import models, data_loader, pl_modules, losses, utils
 
@@ -59,10 +59,10 @@ args = parser.parse_args()
 #         "variable. Optional."
 #     ),
 # )
-experiment = comet_ml.Experiment(
-    api_key="57zOARA0d8ftliPTpL3pXTeVc",
-    project_name="luminal",
-)
+# experiment = comet_ml.Experiment(
+#     api_key="57zOARA0d8ftliPTpL3pXTeVc",
+#     project_name="luminal",
+# )
 
 
 def _collate_fn(batch):
@@ -102,7 +102,11 @@ def main(cfg, path_to_cfg=""):
         cfg["slide_file"], transforms=transforms
     )
     val_ds = data_loader.ClassificationDataset(
-        cfg["slide_file"], split="valid", transforms=transforms
+        cfg["slide_file"],
+        split="valid",
+        transforms=[
+            ToTensor(),
+        ],
     )
 
     # sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
@@ -133,7 +137,7 @@ def main(cfg, path_to_cfg=""):
     # )
 
     val_dl = DataLoader(
-        train_ds, batch_size=cfg["batch_size"], num_workers=cfg["num_workers"]
+        val_ds, batch_size=cfg["batch_size"], num_workers=cfg["num_workers"]
     )
     print("loaded")
     scheduler_func = pl_modules.get_scheduler_func(
@@ -167,13 +171,16 @@ def main(cfg, path_to_cfg=""):
         os.mkdir(logdir)
     if not os.path.exists(logdir):
         os.mkdir(logdir)
+    print(os.environ["COMET_API_KEY"])
     logger = CometLogger(
         api_key=os.environ["COMET_API_KEY"],
         workspace="mehdiec",  # changer nom du compte
         save_dir=logdir,  # dossier du log local data nom du compte
         project_name="luninal",  # changer nom
-        auto_metric_logging=False,
+        auto_metric_logging=True,
     )
+
+    logger.log_hyperparams(cfg)
 
     # if not args.horovod or hvd.rank() == 0:
     #     logger.experiment.add_tag(args.ihc_type)

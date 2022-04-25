@@ -82,6 +82,9 @@ class ClassificationDataset(Dataset):
                             self.slide_idxs.append(slide_idx)
                             self.labels.append(MAPPING[row["ab"]])
                     slide_idx += 1
+                    # delete
+                    # if slide_idx == 2:
+                    #     break
 
         self.transforms = Compose(ifnone(transforms, []))
         self.min_size = min_size
@@ -102,10 +105,11 @@ class ClassificationDataset(Dataset):
             slide.read_region(patch.position, patch.level, patch.size).convert("RGB"),
             dtype=np.float32,
         )
+
         if self.transforms:
             transformed = self.transforms(image=slide_region)
 
-        return transformed["image"].transpose(2, 0, 1), target
+        return transformed["image"], target  # .transpose(2, 0, 1)
 
     # def clean(self):
     #     print(len(self[0]))

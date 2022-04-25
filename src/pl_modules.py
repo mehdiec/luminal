@@ -120,6 +120,7 @@ class BasicClassificationModule(pl.LightningModule):
         self.metrics(y_hat, y.int())
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
+        print(self.metrics.compute())
         self.log_dict(self.metrics.compute(), sync_dist=True)
 
     def configure_optimizers(
