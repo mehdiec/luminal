@@ -99,12 +99,13 @@ class ClassificationDataset(Dataset):
         target = self.labels[idx]  # to define
 
         slide_region = np.asarray(
-            slide.read_region(patch.position, patch.level, patch.size).convert("RGB")
+            slide.read_region(patch.position, patch.level, patch.size).convert("RGB"),
+            dtype=np.float32,
         )
         if self.transforms:
             transformed = self.transforms(image=slide_region)
 
-        return transformed["image"], target
+        return transformed["image"].transpose(2, 0, 1), target
 
     # def clean(self):
     #     print(len(self[0]))

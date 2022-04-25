@@ -34,17 +34,17 @@ class VanillaCNN(nn.Module):
         # By default, Linear layers and Conv layers use Kaiming He initialization
 
         self.features = nn.Sequential(
-            *conv_relu_maxp(1, 16, 5),
+            *conv_relu_maxp(3, 16, 5),
             *conv_relu_maxp(16, 32, 5),
-            *conv_relu_maxp(32, 64, 5)
+            *conv_relu_maxp(32, 64, 5),
         )
-        probe_tensor = torch.zeros((1, 1, 28, 28))
+        probe_tensor = torch.zeros((1, 3, 1024, 1024))
         out_features = self.features(probe_tensor).view(-1)
 
         self.classifier = nn.Sequential(
             *dropout_linear_relu(out_features.shape[0], 128, 0.5),
             *dropout_linear_relu(128, 256, 0.5),
-            nn.Linear(256, num_classes)
+            nn.Linear(256, num_classes),
         )
 
     def forward(self, x):

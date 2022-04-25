@@ -1,5 +1,5 @@
 import os
-
+import comet_ml
 import torch
 import sys
 import yaml
@@ -59,6 +59,10 @@ args = parser.parse_args()
 #         "variable. Optional."
 #     ),
 # )
+experiment = comet_ml.Experiment(
+    api_key="57zOARA0d8ftliPTpL3pXTeVc",
+    project_name="luminal",
+)
 
 
 def _collate_fn(batch):
@@ -70,9 +74,10 @@ def _collate_fn(batch):
     return xs, ys
 
 
-def main(cfg, path_to_cfg):
+def main(cfg, path_to_cfg=""):
     # if args.horovod:
     #     hvd.init()
+    print("main")
 
     seed_everything(workers=True)
 
@@ -139,7 +144,7 @@ def main(cfg, path_to_cfg):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model, loss, optimizer
-    model = models.build_model(args.model, 2)
+    model = models.build_model(cfg["model"], 1)
 
     plmodule = pl_modules.BasicClassificationModule(
         model,
@@ -212,5 +217,7 @@ if __name__ == "__main__":
 
     with open(args.path_to_config, "r") as ymlfile:
         config_file = yaml.load(ymlfile, Loader=yaml.Loader)
+
+    print(config_file)
 
     main(cfg=config_file)
