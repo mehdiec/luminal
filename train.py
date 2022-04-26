@@ -192,7 +192,7 @@ def main(cfg, path_to_cfg=""):
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=3, verbose=False, mode="min"
+        monitor="val_loss_bce", min_delta=0.00, patience=3, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(

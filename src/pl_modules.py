@@ -116,6 +116,13 @@ class BasicClassificationModule(pl.LightningModule):
             self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
         return loss
 
+    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
+        # y = y.to(self.main_device)
+        # y_hat = y_hat.to(self.main_device)
+        self.roc(y_hat, y)
+        self.cm(y_hat, y)
+        self.metrics(y_hat, y.int())
+
     def validation_step(
         self, batch: Tuple[Tensor, Tensor], batch_idx: int, *args, **kwargs
     ):
@@ -136,7 +143,7 @@ class BasicClassificationModule(pl.LightningModule):
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
         #     self.log_images(x, y, y_hat, batch_idx)
 
-        self.metrics(pred, y.int())
+        self.update_metrics(pred, y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
         print(self.metrics.compute())
