@@ -1,9 +1,7 @@
-import os
-import comet_ml
-import torch
-import sys
-import yaml
 import argparse
+import os
+import yaml
+import pytorch_lightning as pl
 from albumentations import (
     RandomRotate90,
     Flip,
@@ -12,17 +10,15 @@ from albumentations import (
 )
 from math import ceil
 
-import pandas as pd
 from pathlib import Path
-from pathaia.util.paths import get_files
 from pytorch_lightning.loggers import CometLogger
-import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
-from torchmetrics import JaccardIndex, Precision, Recall, Specificity, Accuracy
 from torch.utils.data import DataLoader
-from src.transform import ToTensor
+from torchmetrics import Precision, Recall, Specificity, Accuracy
 
+from src.transforms import ToTensor
 from src import models, data_loader, pl_modules, losses, utils
 
 # Init the parser
@@ -115,6 +111,7 @@ def main(cfg, path_to_cfg=""):
         train_ds,
         batch_size=cfg["batch_size"],
         num_workers=cfg["num_workers"],
+        shuffle=True,
     )
     # train_dl = DataLoader(
     #     train_ds,
@@ -137,7 +134,9 @@ def main(cfg, path_to_cfg=""):
     # )
 
     val_dl = DataLoader(
-        val_ds, batch_size=cfg["batch_size"], num_workers=cfg["num_workers"]
+        val_ds,
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["num_workers"],
     )
     print("loaded")
     scheduler_func = pl_modules.get_scheduler_func(
@@ -164,7 +163,7 @@ def main(cfg, path_to_cfg=""):
         ],
     )
     logfolder_temp = Path(cfg["logfolder"])
-    logfolder = logfolder_temp / "luninal/"  # Path
+    logfolder = logfolder_temp / "luminal/"  # Path
     logdir = utils.generate_unique_logpath(logfolder, cfg["model"])
     print("Logging to {}".format(logdir))
     if not os.path.exists(logdir):
@@ -176,7 +175,7 @@ def main(cfg, path_to_cfg=""):
         api_key=os.environ["COMET_API_KEY"],
         workspace="mehdiec",  # changer nom du compte
         save_dir=logdir,  # dossier du log local data nom du compte
-        project_name="luninal",  # changer nom
+        project_name="luminal",  # changer nom
         auto_metric_logging=True,
     )
 
@@ -192,6 +191,9 @@ def main(cfg, path_to_cfg=""):
         mode="min",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
+    early_stop_callback = EarlyStopping(
+        monitor="val_loss", min_delta=0.00, patience=3, verbose=False, mode="min"
+    )
 
     trainer = pl.Trainer(
         gpus=1 if cfg["horovod"] else [cfg["gpu"]],
@@ -200,7 +202,7 @@ def main(cfg, path_to_cfg=""):
         logger=logger,
         precision=16,
         accumulate_grad_batches=cfg["grad_accumulation"],
-        callbacks=[ckpt_callback],
+        callbacks=[ckpt_callback, early_stop_callback],
         # strategy="horovod" if args.horovod else None,
     )
 
@@ -216,7 +218,7 @@ def main(cfg, path_to_cfg=""):
         plmodule,
         train_dataloaders=train_dl,
         val_dataloaders=val_dl,
-        # ckpt_path=ckpt_path,
+        # ckpt_path=logdir,
     )
 
 
