@@ -11,6 +11,8 @@ from nptyping import NDArray
 from math import ceil
 from pathlib import Path
 
+# from transforms import ToTensor
+
 # slide_file = "/data/DeepLearning/mehdi/csv/luminal_data_split.csv"
 
 MAPPING = {
@@ -83,8 +85,8 @@ class ClassificationDataset(Dataset):
                             self.labels.append(MAPPING[row["ab"]])
                     slide_idx += 1
                     # delete
-                    # if slide_idx == 2:
-                    #     break
+                    if slide_idx == 2:
+                        break
 
         self.transforms = Compose(ifnone(transforms, []))
         self.min_size = min_size
@@ -109,7 +111,13 @@ class ClassificationDataset(Dataset):
         if self.transforms:
             transformed = self.transforms(image=slide_region)
 
-        return transformed["image"], target  # .transpose(2, 0, 1)
+        image_with_slide_idx = {
+            "image": transformed["image"],
+            "idx": slide_idx,
+            "target": target,
+        }
+
+        return image_with_slide_idx  # .transpose(2, 0, 1)
 
     # def clean(self):
     #     print(len(self[0]))
