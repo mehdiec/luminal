@@ -61,7 +61,7 @@ class VanillaCNN(nn.Module):
         return y
 
 
-def build_model(model_name, num_classes):
+def build_model(model_name, num_classes, freeze=False):
     model = None
 
     if model_name == "vanilla":
@@ -69,6 +69,10 @@ def build_model(model_name, num_classes):
 
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=True)
+        if freeze:
+            for param in resnet.parameters():
+                param.requires_grad = False
+
         infeat = resnet.fc.in_features
         resnet.fc = nn.Linear(infeat, num_classes)
         # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
