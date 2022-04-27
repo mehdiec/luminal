@@ -1,3 +1,4 @@
+from ordered_set import T
 import pytorch_lightning as pl
 from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
@@ -71,6 +72,7 @@ class BasicClassificationModule(pl.LightningModule):
         wd: float,
         scheduler_func: Optional[Callable] = None,
         metrics: Optional[Sequence[Metric]] = None,
+        scheduler_name=None,
     ):
         """_summary_
 
@@ -93,6 +95,8 @@ class BasicClassificationModule(pl.LightningModule):
         self.cm = ConfusionMatrix(num_classes=2, compute_on_step=False)
         self.roc = ROC(compute_on_step=False)
         self.temp_dict = {}
+        self.scheduler_name = scheduler_name
+        self.slide_info = {"idx": [], "y_hat": None, "true": None}
 
     def forward(self, x: Tensor) -> Tensor:
         return self.model(x).squeeze(1)
@@ -112,8 +116,19 @@ class BasicClassificationModule(pl.LightningModule):
         loss, _, _, _ = self.common_step(batch, batch_idx)
 
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
-        if self.sched is not None:
-            self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
+
+        print(self.opt.param_groups[0]["lr"])
+
+        if self.scheduler_func is not None:
+
+            if self.scheduler_name != "reduce-on-plateau":
+
+                self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
+
+            else:
+
+                self.log("learning_rate", self.opt.param_groups[0]["lr"])
+
         return loss
 
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
@@ -128,16 +143,18 @@ class BasicClassificationModule(pl.LightningModule):
     ):
         loss, y_hat, y, slide_idx = self.common_step(batch, batch_idx)
 
-        self.log(f"val_loss_{get_loss_name(self.loss)}", loss, sync_dist=True)
-
+        self.log(f"val_loss", loss, sync_dist=True)
         # print(slide_idx)
 
-        # if slide_idx not in self.temp_dict.keys():
-        #     self.temp_dict[slide_idx] = y_hat, y.int()
-        # else:
-        #     self.temp_dict[slide_idx] = (
-        #         torch.cat((self.temp_dict[slide_idx][0], y_hat), 0),
-        #     ), y.int()
+        if len(self.slide_info["idx"]) == 0:
+            self.slide_info["idx"] = slide_idx
+
+            self.slide_info["y_hat"] = y_hat
+            self.slide_info["true"] = y.int()
+        else:
+            self.slide_info["idx"] = torch.cat((self.slide_info["idx"], slide_idx), 0)
+            self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
+            self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
 
         pred = torch.sigmoid(y_hat)
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
@@ -148,19 +165,60 @@ class BasicClassificationModule(pl.LightningModule):
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
         print(self.metrics.compute())
         # self.log_dict(self.metrics.compute(), sync_dist=True)
-        self.log_metrics(self.metrics, self.cm, self.roc)
+        self.log_metrics(self.metrics)
+        self.compute_slide_metrics()
+
         # self.temp_dict = {}
 
-    # def compute_slide_metrics(self):
-    #     self.metrics.reset()
-    #     for y_hat, true in self.temp_dict.values():
-    #         pred = torch.sigmoid(torch.sum(y_hat).mean(0)
-    #         true = true[0]
-    #         print((pred, true))
-    #         print((pred.shape, true.shape))
-    #         # pred = torch.mode(y_hat, 0)
-    #         self.metrics(pred, true.int())
-    #     self.log_dict(self.metrics.compute(), sync_dist=True)
+    def compute_slide_metrics(self):
+
+        y_hat_slide = {int(i.cpu().numpy()): [] for i in self.slide_info["idx"]}
+        target_slide = {int(i.cpu().numpy()): -1 for i in self.slide_info["idx"]}
+        print(target_slide)
+        print(self.slide_info["y_hat"])
+        for i, idx in enumerate(self.slide_info["idx"]):
+
+            cpu_idx = int(idx.cpu().numpy())
+            if isinstance(y_hat_slide[cpu_idx], list):
+                y_hat_slide[cpu_idx] = self.slide_info["y_hat"][i : i + 1]
+
+            else:
+                y_hat_slide[cpu_idx] = torch.cat(
+                    (y_hat_slide[cpu_idx], self.slide_info["y_hat"][i : i + 1]), dim=0
+                )
+            target_slide[cpu_idx] = self.slide_info["true"][i]
+
+        pred_slide_mean = []
+        pred_slide_vote = []
+        for y_hat in y_hat_slide.values():
+            pred_slide_mean.append(y_hat.mean(0))
+
+        pred_slide_mean = torch.Tensor(pred_slide_mean)
+
+        targets = torch.LongTensor(list(target_slide.values()))
+
+        print("pred_slide_mean", pred_slide_mean)
+
+        print(pred_slide_mean, targets)
+        print(torch.sigmoid(pred_slide_mean), targets)
+        pred = torch.sigmoid(pred_slide_mean)
+
+        self.metrics.reset()
+        self.cm.reset()
+        self.roc.reset()
+
+        self.metrics(pred, targets)
+        # self.roc(pred_slide_mean, targets)
+        # self.cm(pred_slide_mean, targets)
+
+        # self.log_dict(self.metrics.compute(), sync_dist=True)
+        self.log_metrics(self.metrics, suffix="slide")
+
+        # self.metrics(pred_slide_vote, targets)
+        # self.roc(pred_slide_vote, targets)
+        # self.cm(pred_slide_vote, targets)
+        # # self.log_dict(self.metrics.compute(), sync_dist=True)
+        # self.log_metrics(self.metrics, self.cm, self.roc, suffix="slide_vote")
 
     # def log_slide_metrics(self, preds: torch.Tensor, labels: torch.Tensor):
     #     if not self.trainer.sanity_checking:
@@ -198,50 +256,58 @@ class BasicClassificationModule(pl.LightningModule):
             return self.opt
         else:
             self.sched = self.scheduler_func(self.opt)
-            return {"optimizer": self.opt, "lr_scheduler": self.sched}
+            tamp_sched = {
+                "optimizer": self.opt,
+                "scheduler": self.scheduler_func(self.opt),
+                "monitor": "val_loss",
+                "interval": "epoch",
+            }
+            return tamp_sched
 
-    def log_images(self, x: Tensor, y: Tensor, y_hat: Tensor, batch_idx: int):
-        y = y[:, None].repeat(1, 3, 1, 1)
-        y_hat = y_hat[:, None].repeat(1, 3, 1, 1)
-        sample_imgs = torch.cat((x, y, y_hat))
-        grid = make_grid(sample_imgs, y.shape[0])
-        self.logger.experiment.log_image(
-            to_pil_image(grid),
-            f"val_image_sample_{self.current_epoch}_{batch_idx}",
-            step=self.current_epoch,
-        )
+    # def log_images(self, x: Tensor, y: Tensor, y_hat: Tensor, batch_idx: int):
+    #     y = y[:, None].repeat(1, 3, 1, 1)
+    #     y_hat = y_hat[:, None].repeat(1, 3, 1, 1)
+    #     sample_imgs = torch.cat((x, y, y_hat))
+    #     grid = make_grid(sample_imgs, y.shape[0])
+    #     self.logger.experiment.log_image(
+    #         to_pil_image(y),
+    #         f"val_image_sample_{self.current_epoch}_{batch_idx}",
+    #         step=self.current_epoch,
+    #     )
 
-    def log_metrics(self, metrics, cm, roc, suffix: str = None):
+    def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
         log = {}
         app = f"_{suffix}" if suffix is not None else ""
         metric_dict = metrics.compute()
+        print(metrics.compute())
         for metric in metric_dict:
             val = metric_dict[metric]
             log[metric + app] = val
+        if cm:
 
-        if not self.trainer.sanity_checking:
-            mat = cm.compute().cpu().numpy()
-            self.logger.experiment.log_confusion_matrix(
-                # labels=self.hparams.classes,
-                matrix=mat,
-                step=self.global_step,
-                epoch=self.current_epoch,
-                file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
-            )
-            fprs, tprs, _ = roc.compute()
+            if not self.trainer.sanity_checking:
+                mat = cm.compute().cpu().numpy()
+                self.logger.experiment.log_confusion_matrix(
+                    # labels=self.hparams.classes,
+                    matrix=mat,
+                    step=self.global_step,
+                    epoch=self.current_epoch,
+                    file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
+                )
+                fprs, tprs, _ = roc.compute()
 
-            self.logger.experiment.log_curve(
-                f"ROC{app}_{self.current_epoch}",
-                x=fprs.tolist(),
-                y=tprs.tolist(),
-                step=self.current_epoch,
-                overwrite=False,
-            )
-            log[f"AUC{app}"] = auc(fprs, tprs)
+                self.logger.experiment.log_curve(
+                    f"ROC{app}_{self.current_epoch}",
+                    x=fprs.tolist(),
+                    y=tprs.tolist(),
+                    step=self.current_epoch,
+                    overwrite=False,
+                )
+                log[f"AUC{app}"] = auc(fprs, tprs)
+                cm.reset()
+                roc.reset()
 
         metrics.reset()
-        cm.reset()
-        roc.reset()
         self.log_dict(log, on_step=False, on_epoch=True)
 
     # def freeze_encoder(self):
