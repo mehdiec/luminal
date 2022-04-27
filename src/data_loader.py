@@ -22,27 +22,6 @@ MAPPING = {
 
 
 class ClassificationDataset(Dataset):
-    r"""
-    PyTorch dataset for slide segmentation tasks.
-
-    Args:
-        slide_paths: list of slides' filepaths.
-        mask_paths: list of masks' filepaths. Masks are supposed to be tiled pyramidal
-            images.
-        patches_paths: list of patch csvs' filepaths. Files must be formatted according
-            to `PathAIA API <https://github.com/MicroMedIAn/PathAIA>`_.
-        stain_matrices_paths: path to stain matrices .npy files. Each file must contain
-            a (2, 3) matrice to use for stain separation. If not sppecified while
-            `stain_augmentor` is, stain matrices will be computed at runtime (can cause
-            a bottleneckd uring training).
-        stain_augmentor: :class:`~apriorics.transforms.StainAugmentor` object to use for
-            stain augmentation.
-        transforms: list of `albumentation <https://albumentations.ai/>`_ transforms to
-            use on images (and on masks when relevant).
-        slide_backend: whether to use `OpenSlide <https://openslide.org/>`_ or
-            `cuCIM <https://github.com/rapidsai/cucim>`_ to load slides.
-    """
-
     def __init__(
         self,
         slide_file: str,
@@ -50,6 +29,7 @@ class ClassificationDataset(Dataset):
         slide_backend: str = "cucim",
         min_size: int = 10,
         split: str = "train",
+        noted: bool = False,
     ):
         super().__init__()
         self.slides = []
@@ -59,7 +39,7 @@ class ClassificationDataset(Dataset):
         self.labels = []
         self.split = []
         slide_idx = 0
-
+        self.noted = noted
         with open(slide_file, "r") as out_file:
             reader = csv.DictReader(out_file)
 
@@ -68,6 +48,8 @@ class ClassificationDataset(Dataset):
                     slide_path = row["id"]
 
                     outfolder = Path("/data/DeepLearning/mehdi/csv/")
+                    if self.noted:
+                        outfolder = Path("/data/DeepLearning/mehdi/csv_annot/")
                     csv_file = Path(slide_path.split(sep="/")[-1][:-4])
                     patches_path = (
                         outfolder / "patch_csvs" / csv_file.with_suffix(".csv")
@@ -85,8 +67,8 @@ class ClassificationDataset(Dataset):
                             self.labels.append(MAPPING[row["ab"]])
                     slide_idx += 1
                     # delete
-                    if slide_idx == 2:
-                        break
+                    # if slide_idx == 1:
+                    #     break
 
         self.transforms = Compose(ifnone(transforms, []))
         self.min_size = min_size
