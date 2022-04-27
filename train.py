@@ -95,7 +95,7 @@ def main(cfg, path_to_cfg=""):
         ]
     print("########################## dataset ##########################")
     train_ds = data_loader.ClassificationDataset(
-        cfg["slide_file"], transforms=transforms
+        cfg["slide_file"], transforms=transforms, noted=cfg["noted"]
     )
     val_ds = data_loader.ClassificationDataset(
         cfg["slide_file"],
@@ -103,6 +103,7 @@ def main(cfg, path_to_cfg=""):
         transforms=[
             ToTensor(),
         ],
+        noted=cfg["noted"],
     )
 
     # sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
@@ -147,7 +148,7 @@ def main(cfg, path_to_cfg=""):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model, loss, optimizer
-    model = models.build_model(cfg["model"], 1)
+    model = models.build_model(cfg["model"], 1, cfg["freeze"])
 
     plmodule = pl_modules.BasicClassificationModule(
         model,
@@ -161,6 +162,7 @@ def main(cfg, path_to_cfg=""):
             Recall(),
             Specificity(),
         ],
+        scheduler_name=cfg["scheduler"],
     )
     logfolder_temp = Path(cfg["logfolder"])
     logfolder = logfolder_temp / "luminal/"  # Path
@@ -186,19 +188,19 @@ def main(cfg, path_to_cfg=""):
     loss = cfg["loss"]
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
-        monitor=f"val_loss_{loss}",
+        monitor="val_loss",
         save_last=True,
         mode="min",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
     early_stop_callback = EarlyStopping(
-        monitor="val_loss_bce", min_delta=0.00, patience=3, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=5, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
         gpus=1 if cfg["horovod"] else [cfg["gpu"]],
-        min_epochs=cfg["epochs"],
-        max_epochs=cfg["epochs"],
+        min_epochs=3,
+        max_epochs=20,
         logger=logger,
         precision=16,
         accumulate_grad_batches=cfg["grad_accumulation"],
