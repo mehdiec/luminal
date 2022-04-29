@@ -36,31 +36,6 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-# parser.add_argument(
-#     "--maskfolder",
-#     type=Path,
-#     help="Input folder containing tif mask files.",
-#     required=True,
-# )
-
-
-# parser.add_argument(
-#     "--resume-version", help="Version id of a model to load weights from. Optional."
-# )
-# parser.add_argument(
-#     "--seed",
-#     type=int,
-#     help=(
-#         "Specify seed for RNG. Can also be set using PL_GLOBAL_SEED environment "
-#         "variable. Optional."
-#     ),
-# )
-# experiment = comet_ml.Experiment(
-#     api_key="57zOARA0d8ftliPTpL3pXTeVc",
-#     project_name="luminal",
-# )
-
-
 def _collate_fn(batch):
     xs = []
     ys = []
@@ -84,6 +59,8 @@ def main(cfg, path_to_cfg=""):
     #     stain_matrices_paths = stain_matrices_paths[train_idxs]
     # else:
     #     stain_matrices_paths = None
+
+    # check for transformation
     transforms = None
     if cfg["transform"]:
         transforms = [
@@ -94,6 +71,7 @@ def main(cfg, path_to_cfg=""):
             ToTensor(),
         ]
     print("########################## dataset ##########################")
+    # load the dataset
     train_ds = data_loader.ClassificationDataset(
         cfg["slide_file"], transforms=transforms, noted=cfg["noted"]
     )
@@ -114,25 +92,6 @@ def main(cfg, path_to_cfg=""):
         num_workers=cfg["num_workers"],
         shuffle=True,
     )
-    # train_dl = DataLoader(
-    #     train_ds,
-    #     batch_size=args.batch_size,
-    #     pin_memory=True,
-    #     num_workers=args.num_workers,
-    #     drop_last=True,
-    #     sampler=sampler,
-    #     collate_fn=_collate_fn,
-    #     persistent_workers=True,
-    # )
-    # val_dl = DataLoader(
-    #     val_ds,
-    #     batch_size=args.batch_size,
-    #     shuffle=False,
-    #     pin_memory=True,
-    #     num_workers=args.num_workers,
-    #     collate_fn=_collate_fn,
-    #     persistent_workers=True,
-    # )
 
     val_dl = DataLoader(
         val_ds,
@@ -140,6 +99,8 @@ def main(cfg, path_to_cfg=""):
         num_workers=cfg["num_workers"],
     )
     print("loaded")
+
+    # initialize the scheduler
     scheduler_func = pl_modules.get_scheduler_func(
         cfg["scheduler"],
         total_steps=ceil(len(train_dl) / (cfg["grad_accumulation"])) * cfg["epochs"],
@@ -147,9 +108,10 @@ def main(cfg, path_to_cfg=""):
     )
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
-    # Init model, loss, optimizer
+    # Init model
     model = models.build_model(cfg["model"], 1, cfg["freeze"])
 
+    # creating unique log folder
     logfolder_temp = Path(cfg["logfolder"])
     logfolder = logfolder_temp / "luminal/"  # Path
     logdir = utils.generate_unique_logpath(logfolder, cfg["model"])
@@ -158,7 +120,8 @@ def main(cfg, path_to_cfg=""):
         os.mkdir(logdir)
     if not os.path.exists(logdir):
         os.mkdir(logdir)
-    print(os.environ["COMET_API_KEY"])
+
+    # Init pl module
     plmodule = pl_modules.BasicClassificationModule(
         model,
         lr=cfg["lr"],
@@ -176,12 +139,12 @@ def main(cfg, path_to_cfg=""):
     )
     logger = CometLogger(
         api_key=os.environ["COMET_API_KEY"],
-        workspace="mehdiec",  # changer nom du compte
-        save_dir=logdir,  # dossier du log local data nom du compte
-        project_name="luminal",  # changer nom
+        workspace="mehdiec",
+        save_dir=logdir,
+        project_name="luminal",
         auto_metric_logging=True,
     )
-
+    cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
 
     # if not args.horovod or hvd.rank() == 0:
