@@ -1,4 +1,4 @@
-from ordered_set import T
+
 import pytorch_lightning as pl
 from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
@@ -12,12 +12,12 @@ from torch.optim.lr_scheduler import (
 )
 from torchmetrics import ROC, ConfusionMatrix
 from torchmetrics.functional import auc
-from torchvision.utils import make_grid
 from torchvision.transforms.functional import to_pil_image
 from torchmetrics import Metric, MetricCollection
 from pathaia.util.basic import ifnone
 
 from src.losses import get_loss_name
+import json
 
 
 def get_scheduler_func(
@@ -73,6 +73,7 @@ class BasicClassificationModule(pl.LightningModule):
         scheduler_func: Optional[Callable] = None,
         metrics: Optional[Sequence[Metric]] = None,
         scheduler_name=None,
+        logdir=None,
     ):
         """_summary_
 
@@ -97,6 +98,12 @@ class BasicClassificationModule(pl.LightningModule):
         self.temp_dict = {}
         self.scheduler_name = scheduler_name
         self.slide_info = {"idx": [], "y_hat": None, "true": None}
+        self.logdir = logdir
+        self.main_device = "cuda:0"
+        self.count_lumA_0 = 0
+        self.count_lumA_1 = 0
+        self.count_lumB_0 = 0
+        self.count_lumB_1 = 0
 
     def forward(self, x: Tensor) -> Tensor:
         return self.model(x).squeeze(1)
@@ -109,15 +116,13 @@ class BasicClassificationModule(pl.LightningModule):
         y_hat = self(image)
         loss = self.loss(y_hat, target.float())
 
-        return loss, y_hat, target.int(), slide_idx
+        return loss, y_hat, target.int(), slide_idx, image
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
 
-        loss, _, _, _ = self.common_step(batch, batch_idx)
+        loss, _, _, _, _ = self.common_step(batch, batch_idx)
 
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
-
-        print(self.opt.param_groups[0]["lr"])
 
         if self.scheduler_func is not None:
 
@@ -141,7 +146,7 @@ class BasicClassificationModule(pl.LightningModule):
     def validation_step(
         self, batch: Tuple[Tensor, Tensor], batch_idx: int, *args, **kwargs
     ):
-        loss, y_hat, y, slide_idx = self.common_step(batch, batch_idx)
+        loss, y_hat, y, slide_idx, images = self.common_step(batch, batch_idx)
 
         self.log(f"val_loss", loss, sync_dist=True)
         # print(slide_idx)
@@ -156,17 +161,57 @@ class BasicClassificationModule(pl.LightningModule):
             self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
             self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
 
-        pred = torch.sigmoid(y_hat)
+        preds = torch.sigmoid(y_hat)
+        if (
+            self.count_lumB_0 < 4
+            or self.count_lumA_1 < 4
+            or self.count_lumB_1 < 4
+            or self.count_lumA_0 < 4
+        ):
+            for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
+                if taget == 1 and pred < 0.1:
+                    if self.count_lumB_0 < 4:
+                        self.log_images(
+                            image,
+                            title=f"/Mauvaise classification de luminal B slide_idx:{slide_id} prediction:{pred}",
+                        )
+                        self.count_lumB_0 += 1
+
+                if taget == 1 and pred > 0.9:
+                    if self.count_lumB_1 < 4:
+                        self.log_images(
+                            image,
+                            title=f"/Bonne classification de luminal B slide_idx:{slide_id} prediction:{pred}",
+                        )
+                        self.count_lumB_1 += 1
+                if taget == 0 and pred < 0.1:
+                    if self.count_lumA_0 < 4:
+                        self.log_images(
+                            image,
+                            title=f"/Bonne classification de luminal A slide_idx:{slide_id} prediction:{pred}",
+                        )
+                        self.count_lumA_0 += 1
+                if taget == 0 and pred > 0.9:
+                    if self.count_lumA_1 < 4:
+                        self.log_images(
+                            image,
+                            title=f"/Mauvaise classification de luminal A slide_idx:{slide_id} prediction:{pred}",
+                        )
+                        self.count_lumA_1 += 1
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
         #     self.log_images(x, y, y_hat, batch_idx)
 
-        self.update_metrics(pred, y)
+        self.update_metrics(preds, y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
-        print(self.metrics.compute())
+        # print(self.metrics.compute())
         # self.log_dict(self.metrics.compute(), sync_dist=True)
-        self.log_metrics(self.metrics)
+        self.log_metrics(self.metrics, self.cm, self.roc, suffix="patch")
         self.compute_slide_metrics()
+        self.count_lumA_0 = 0
+        self.count_lumA_1 = 0
+        self.count_lumB_0 = 0
+        self.count_lumB_1 = 0
 
         # self.temp_dict = {}
 
@@ -174,8 +219,8 @@ class BasicClassificationModule(pl.LightningModule):
 
         y_hat_slide = {int(i.cpu().numpy()): [] for i in self.slide_info["idx"]}
         target_slide = {int(i.cpu().numpy()): -1 for i in self.slide_info["idx"]}
-        print(target_slide)
-        print(self.slide_info["y_hat"])
+        # print(target_slide)
+        # print(self.slide_info["y_hat"])
         for i, idx in enumerate(self.slide_info["idx"]):
 
             cpu_idx = int(idx.cpu().numpy())
@@ -190,16 +235,31 @@ class BasicClassificationModule(pl.LightningModule):
 
         pred_slide_mean = []
         pred_slide_vote = []
+        t = self.current_epoch
+
+        patches_predictions = {cpu_idx: y_hat for cpu_idx, y_hat in y_hat_slide.items()}
+
         for y_hat in y_hat_slide.values():
             pred_slide_mean.append(y_hat.mean(0))
 
         pred_slide_mean = torch.Tensor(pred_slide_mean)
 
+        # slide_prediction = pred_slide_mean.cpu.numpy.to_list()
+        patches_predictions_hashable = {
+            cpu_idx: y_hat.cpu().numpy().tolist()
+            for cpu_idx, y_hat in y_hat_slide.items()
+        }
+
+        sample = {
+            "prediction_slide": pred_slide_mean.cpu().numpy().tolist(),
+            "prediction_patch": patches_predictions_hashable,
+        }
+
+        with open(self.logdir + f"/result__{t}.json", "w") as fp:
+            json.dump(sample, fp)
+
         targets = torch.LongTensor(list(target_slide.values()))
 
-        print("pred_slide_mean", pred_slide_mean)
-
-        print(pred_slide_mean, targets)
         print(torch.sigmoid(pred_slide_mean), targets)
         pred = torch.sigmoid(pred_slide_mean)
 
@@ -208,42 +268,18 @@ class BasicClassificationModule(pl.LightningModule):
         self.roc.reset()
 
         self.metrics(pred, targets)
-        # self.roc(pred_slide_mean, targets)
-        # self.cm(pred_slide_mean, targets)
+        self.roc(pred.to(self.main_device), targets.to(self.main_device))
+
+        self.cm(pred.to(self.main_device), targets.to(self.main_device))
 
         # self.log_dict(self.metrics.compute(), sync_dist=True)
-        self.log_metrics(self.metrics, suffix="slide")
+        self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide")
 
         # self.metrics(pred_slide_vote, targets)
         # self.roc(pred_slide_vote, targets)
         # self.cm(pred_slide_vote, targets)
         # # self.log_dict(self.metrics.compute(), sync_dist=True)
         # self.log_metrics(self.metrics, self.cm, self.roc, suffix="slide_vote")
-
-    # def log_slide_metrics(self, preds: torch.Tensor, labels: torch.Tensor):
-    #     if not self.trainer.sanity_checking:
-    #         items = self.trainer.datamodule.data.valid.items
-    #         patch_slides = np.vectorize(lambda x: x.parent.name)(items)
-    #         slides = np.unique(patch_slides)
-    #         slide_labels = []
-    #         slide_preds = []
-    #         roc = ROC(num_classes=self.hparams.n_classes, compute_on_step=False)
-    #         cm = ConfusionMatrix(self.hparams.n_classes, compute_on_step=False)
-    #         metrics = ClassifMetrics(
-    #             n_classes=self.hparams.n_classes, compute_on_step=False
-    #         )
-    #         for slide in slides:
-    #             idxs = np.argwhere(patch_slides == slide).squeeze()
-    #             label = labels[idxs][0]
-    #             pred = preds[idxs].mean(0)
-    #             slide_labels.append(label)
-    #             slide_preds.append(pred)
-    #         slide_labels = torch.stack(slide_labels)
-    #         slide_preds = torch.stack(slide_preds)
-    #         cm(slide_preds, slide_labels)
-    #         metrics(slide_preds, slide_labels)
-    #         roc(slide_preds, slide_labels)
-    #         self.log_metrics(metrics, cm, roc, suffix="slide")
 
     def configure_optimizers(
         self,
@@ -264,16 +300,17 @@ class BasicClassificationModule(pl.LightningModule):
             }
             return tamp_sched
 
-    # def log_images(self, x: Tensor, y: Tensor, y_hat: Tensor, batch_idx: int):
-    #     y = y[:, None].repeat(1, 3, 1, 1)
-    #     y_hat = y_hat[:, None].repeat(1, 3, 1, 1)
-    #     sample_imgs = torch.cat((x, y, y_hat))
-    #     grid = make_grid(sample_imgs, y.shape[0])
-    #     self.logger.experiment.log_image(
-    #         to_pil_image(y),
-    #         f"val_image_sample_{self.current_epoch}_{batch_idx}",
-    #         step=self.current_epoch,
-    #     )
+    def log_images(self, x: Tensor, title: str):
+        # sample_imgs = torch.zeros([100, 100, 3])  #
+        sample_imgs = x
+        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape) 
+        image = to_pil_image(sample_imgs)
+        image.save(self.logdir + title + ".png")
+        # self.logger.experiment.log_image(
+        #     sample_imgs,
+        #     name=title,
+        #     step=self.current_epoch,
+        # )
 
     def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
         log = {}
@@ -309,9 +346,3 @@ class BasicClassificationModule(pl.LightningModule):
 
         metrics.reset()
         self.log_dict(log, on_step=False, on_epoch=True)
-
-    # def freeze_encoder(self):
-    #     for m in named_leaf_modules(self.model):
-    #         if "encoder" in m.name and not isinstance(m, nn.BatchNorm2d):
-    #             for param in m.parameters():
-    #                 param.requires_grad = False
