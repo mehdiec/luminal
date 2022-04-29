@@ -150,6 +150,15 @@ def main(cfg, path_to_cfg=""):
     # Init model, loss, optimizer
     model = models.build_model(cfg["model"], 1, cfg["freeze"])
 
+    logfolder_temp = Path(cfg["logfolder"])
+    logfolder = logfolder_temp / "luminal/"  # Path
+    logdir = utils.generate_unique_logpath(logfolder, cfg["model"])
+    print("Logging to {}".format(logdir))
+    if not os.path.exists(logdir):
+        os.mkdir(logdir)
+    if not os.path.exists(logdir):
+        os.mkdir(logdir)
+    print(os.environ["COMET_API_KEY"])
     plmodule = pl_modules.BasicClassificationModule(
         model,
         lr=cfg["lr"],
@@ -163,16 +172,8 @@ def main(cfg, path_to_cfg=""):
             Specificity(),
         ],
         scheduler_name=cfg["scheduler"],
+        logdir=logdir,
     )
-    logfolder_temp = Path(cfg["logfolder"])
-    logfolder = logfolder_temp / "luminal/"  # Path
-    logdir = utils.generate_unique_logpath(logfolder, cfg["model"])
-    print("Logging to {}".format(logdir))
-    if not os.path.exists(logdir):
-        os.mkdir(logdir)
-    if not os.path.exists(logdir):
-        os.mkdir(logdir)
-    print(os.environ["COMET_API_KEY"])
     logger = CometLogger(
         api_key=os.environ["COMET_API_KEY"],
         workspace="mehdiec",  # changer nom du compte
