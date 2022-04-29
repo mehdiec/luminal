@@ -1,4 +1,4 @@
-from os import PathLike
+import sys
 from typing import Any, Dict, Iterator, List, Sequence, Optional, Tuple, Union
 import numpy as np
 import torch
@@ -10,6 +10,7 @@ import csv
 from nptyping import NDArray
 from math import ceil
 from pathlib import Path
+from torchvision.transforms.functional import to_pil_image
 
 # from transforms import ToTensor
 
@@ -58,18 +59,19 @@ class ClassificationDataset(Dataset):
         with open(slide_file, "r") as out_file:
             reader = csv.DictReader(out_file)
 
+            if self.noted:
+                outfolder = outfolder / "csv_annot"
+            else:
+                outfolder = outfolder / "csv"
             for (
                 row
             ) in (
                 reader
             ):  # we read each row of our csv to get the right slide for the right split
+                # print(outfolder)
                 if row["split"] == split:
                     slide_path = row["id"]
-
-                    outfolder = outfolder / "csv"
-                    if self.noted:
-                        outfolder = outfolder / "csv_annot"
-
+                    # print(outfolder)
                     self.slides.append(Slide(slide_path, backend=slide_backend))
 
                     # we have access to the csv containing all the patches for a given slide
@@ -87,8 +89,8 @@ class ClassificationDataset(Dataset):
                     slide_idx += 1
 
                     # delete
-                    # if slide_idx == 1:
-                    #     break
+                    if slide_idx == 1:
+                        break
         self.transforms = Compose(ifnone(transforms, []))
 
         # self.clean()
@@ -106,8 +108,11 @@ class ClassificationDataset(Dataset):
 
         slide_region = np.asarray(
             slide.read_region(patch.position, patch.level, patch.size).convert("RGB"),
-            dtype=np.float32,
+            # dtype=np.float32,
         )
+        # image = to_pil_image(slide_region)
+        # image.save("oof.png")
+        # sys.exit(1)
 
         if self.transforms:
             transformed = self.transforms(image=slide_region)

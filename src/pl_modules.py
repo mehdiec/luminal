@@ -1,3 +1,4 @@
+import sys
 import pytorch_lightning as pl
 from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
@@ -105,7 +106,8 @@ class BasicClassificationModule(pl.LightningModule):
         self.count_lumB_1 = 0
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.model(x)  # .squeeze(1)
+
+        return self.model(x.squeeze(1))  # .squeeze(1)
 
     def common_step(self, batch):
 
@@ -113,7 +115,8 @@ class BasicClassificationModule(pl.LightningModule):
         slide_idx = batch["idx"]
         target = batch["target"]
         y_hat = self(image)
-        loss = self.loss(y_hat, target.float())
+        print(y_hat.squeeze(), target.float())
+        loss = self.loss(y_hat.squeeze(), target.float())
 
         return loss, y_hat, target.int(), slide_idx, image
 
@@ -136,7 +139,7 @@ class BasicClassificationModule(pl.LightningModule):
 
     def validation_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int):
 
-        loss, y_hat, y, slide_idx, images = self.common_step(batch, batch_idx)
+        loss, y_hat, y, slide_idx, images = self.common_step(batch)
 
         self.log(f"val_loss", loss, sync_dist=True)
         # print(slide_idx)
@@ -293,7 +296,7 @@ class BasicClassificationModule(pl.LightningModule):
         # sample_imgs = torch.zeros([100, 100, 3])  #
         sample_imgs = x
         # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
-        image = to_pil_image(sample_imgs)
+        image = to_pil_image(sample_imgs, "RGB")
         image.save(self.logdir + title + ".png")
         # self.logger.experiment.log_image(
         #     sample_imgs,
