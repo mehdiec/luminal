@@ -259,9 +259,7 @@ class BasicClassificationModule(pl.LightningModule):
         self.cm.reset()
         self.roc.reset()
 
-        self.metrics(pred, targets)
-        self.roc(pred.to(self.main_device), targets.to(self.main_device))
-        self.cm(pred.to(self.main_device), targets.to(self.main_device))
+        self.update_metrics(pred.to(self.main_device), targets.to(self.main_device))
 
         # self.log_dict(self.metrics.compute(), sync_dist=True)
         self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide_mean")
