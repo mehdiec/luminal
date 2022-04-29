@@ -1,4 +1,3 @@
-
 import pytorch_lightning as pl
 from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
@@ -106,9 +105,9 @@ class BasicClassificationModule(pl.LightningModule):
         self.count_lumB_1 = 0
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.model(x).squeeze(1)
+        return self.model(x)  # .squeeze(1)
 
-    def common_step(self, batch, batch_idx):
+    def common_step(self, batch):
 
         image = batch["image"]
         slide_idx = batch["idx"]
@@ -120,48 +119,41 @@ class BasicClassificationModule(pl.LightningModule):
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
 
-        loss, _, _, _, _ = self.common_step(batch, batch_idx)
+        loss, _, _, _, _ = self.common_step(batch)
 
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
 
         if self.scheduler_func is not None:
 
-            if self.scheduler_name != "reduce-on-plateau":
-
-                self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
-
-            else:
-
-                self.log("learning_rate", self.opt.param_groups[0]["lr"])
+            self.log("learning_rate", self.opt.param_groups[0]["lr"])
 
         return loss
 
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
-        # y = y.to(self.main_device)
-        # y_hat = y_hat.to(self.main_device)
         self.roc(y_hat, y)
         self.cm(y_hat, y)
         self.metrics(y_hat, y.int())
 
-    def validation_step(
-        self, batch: Tuple[Tensor, Tensor], batch_idx: int, *args, **kwargs
-    ):
+    def validation_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int):
+
         loss, y_hat, y, slide_idx, images = self.common_step(batch, batch_idx)
 
         self.log(f"val_loss", loss, sync_dist=True)
         # print(slide_idx)
 
+        # at first slide info is a dict with empty values
         if len(self.slide_info["idx"]) == 0:
             self.slide_info["idx"] = slide_idx
-
             self.slide_info["y_hat"] = y_hat
             self.slide_info["true"] = y.int()
+        # after first checking it is possible concatenate the tensors
         else:
             self.slide_info["idx"] = torch.cat((self.slide_info["idx"], slide_idx), 0)
             self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
             self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
 
         preds = torch.sigmoid(y_hat)
+
         if (
             self.count_lumB_0 < 4
             or self.count_lumA_1 < 4
@@ -170,29 +162,29 @@ class BasicClassificationModule(pl.LightningModule):
         ):
             for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
                 if taget == 1 and pred < 0.1:
-                    if self.count_lumB_0 < 4:
+                    if self.count_lumB_0 < 10:
                         self.log_images(
                             image,
                             title=f"/Mauvaise classification de luminal B slide_idx:{slide_id} prediction:{pred}",
                         )
                         self.count_lumB_0 += 1
 
-                if taget == 1 and pred > 0.9:
-                    if self.count_lumB_1 < 4:
-                        self.log_images(
-                            image,
-                            title=f"/Bonne classification de luminal B slide_idx:{slide_id} prediction:{pred}",
-                        )
-                        self.count_lumB_1 += 1
-                if taget == 0 and pred < 0.1:
-                    if self.count_lumA_0 < 4:
-                        self.log_images(
-                            image,
-                            title=f"/Bonne classification de luminal A slide_idx:{slide_id} prediction:{pred}",
-                        )
-                        self.count_lumA_0 += 1
+                # if taget == 1 and pred > 0.9:
+                #     if self.count_lumB_1 < 4:
+                #         self.log_images(
+                #             image,
+                #             title=f"/Bonne classification de luminal B slide_idx:{slide_id} prediction:{pred}",
+                #         )
+                #         self.count_lumB_1 += 1
+                # if taget == 0 and pred < 0.1:
+                #     if self.count_lumA_0 < 4:
+                #         self.log_images(
+                #             image,
+                #             title=f"/Bonne classification de luminal A slide_idx:{slide_id} prediction:{pred}",
+                #         )
+                #         self.count_lumA_0 += 1
                 if taget == 0 and pred > 0.9:
-                    if self.count_lumA_1 < 4:
+                    if self.count_lumA_1 < 10:
                         self.log_images(
                             image,
                             title=f"/Mauvaise classification de luminal A slide_idx:{slide_id} prediction:{pred}",
@@ -204,8 +196,7 @@ class BasicClassificationModule(pl.LightningModule):
         self.update_metrics(preds, y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
-        # print(self.metrics.compute())
-        # self.log_dict(self.metrics.compute(), sync_dist=True)
+
         self.log_metrics(self.metrics, self.cm, self.roc, suffix="patch")
         self.compute_slide_metrics()
         self.count_lumA_0 = 0
@@ -217,12 +208,12 @@ class BasicClassificationModule(pl.LightningModule):
 
     def compute_slide_metrics(self):
 
+        # all the slide ids are put in a dictionary with empty values
         y_hat_slide = {int(i.cpu().numpy()): [] for i in self.slide_info["idx"]}
         target_slide = {int(i.cpu().numpy()): -1 for i in self.slide_info["idx"]}
-        # print(target_slide)
-        # print(self.slide_info["y_hat"])
-        for i, idx in enumerate(self.slide_info["idx"]):
 
+        # the two dictionaries are populated by the info
+        for i, idx in enumerate(self.slide_info["idx"]):
             cpu_idx = int(idx.cpu().numpy())
             if isinstance(y_hat_slide[cpu_idx], list):
                 y_hat_slide[cpu_idx] = self.slide_info["y_hat"][i : i + 1]
@@ -254,7 +245,7 @@ class BasicClassificationModule(pl.LightningModule):
             "prediction_slide": pred_slide_mean.cpu().numpy().tolist(),
             "prediction_patch": patches_predictions_hashable,
         }
-
+        # the results are saved in a json
         with open(self.logdir + f"/result__{t}.json", "w") as fp:
             json.dump(sample, fp)
 
@@ -263,17 +254,17 @@ class BasicClassificationModule(pl.LightningModule):
         print(torch.sigmoid(pred_slide_mean), targets)
         pred = torch.sigmoid(pred_slide_mean)
 
+        # the metrics are reseted then compute them
         self.metrics.reset()
         self.cm.reset()
         self.roc.reset()
 
         self.metrics(pred, targets)
         self.roc(pred.to(self.main_device), targets.to(self.main_device))
-
         self.cm(pred.to(self.main_device), targets.to(self.main_device))
 
         # self.log_dict(self.metrics.compute(), sync_dist=True)
-        self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide")
+        self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide_mean")
 
         # self.metrics(pred_slide_vote, targets)
         # self.roc(pred_slide_vote, targets)
@@ -303,7 +294,7 @@ class BasicClassificationModule(pl.LightningModule):
     def log_images(self, x: Tensor, title: str):
         # sample_imgs = torch.zeros([100, 100, 3])  #
         sample_imgs = x
-        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape) 
+        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
         image = to_pil_image(sample_imgs)
         image.save(self.logdir + title + ".png")
         # self.logger.experiment.log_image(
