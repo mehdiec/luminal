@@ -31,6 +31,7 @@ class ClassificationDataset(Dataset):
         slide_backend: str = "cucim",
         split: str = "train",
         noted: bool = False,
+        level: int = 0,
     ):
         """_summary_
 
@@ -77,8 +78,14 @@ class ClassificationDataset(Dataset):
                     # we have access to the csv containing all the patches for a given slide
                     csv_file = Path(slide_path.split(sep="/")[-1][:-4])
                     patches_path = (
-                        outfolder / "patch_csvs" / csv_file.with_suffix(".csv")
+                        outfolder
+                        / "patch_csvs"
+                        / str(level)
+                        / csv_file.with_suffix(".csv")
                     )
+                    # patches_path = (
+                    #     outfolder / "patch_csvs" / csv_file.with_suffix(".csv")
+                    # )
 
                     with open(patches_path, "r") as patch_file:
                         reader = csv.DictReader(patch_file)
@@ -89,8 +96,9 @@ class ClassificationDataset(Dataset):
                     slide_idx += 1
 
                     # delete
-                    if slide_idx == 1:
-                        break
+                    # if slide_idx == 1:
+                    #     break
+
         self.transforms = Compose(ifnone(transforms, []))
 
         # self.clean()
@@ -106,10 +114,16 @@ class ClassificationDataset(Dataset):
         slide = self.slides[slide_idx]
         target = self.labels[idx]
 
-        slide_region = np.asarray(
-            slide.read_region(patch.position, patch.level, patch.size).convert("RGB"),
-            # dtype=np.float32,
+        slide_region = (
+            np.asarray(
+                slide.read_region(patch.position, patch.level, patch.size).convert(
+                    "RGB"
+                ),
+                # dtype=np.float32,
+            )
+            / 255.0
         )
+
         # image = to_pil_image(slide_region)
         # image.save("oof.png")
         # sys.exit(1)
