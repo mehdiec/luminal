@@ -16,3 +16,5 @@ grad_accumulation: 1
 transform: True 
 noted : True
 freeze : True
+pretrained : True
+level: 0
