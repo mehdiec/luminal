@@ -61,14 +61,14 @@ class VanillaCNN(nn.Module):
         return y
 
 
-def build_model(model_name, num_classes, freeze=False):
+def build_model(model_name, num_classes, freeze=False, pretrained=True):
     model = None
 
     if model_name == "vanilla":
         model = VanillaCNN(num_classes)
 
     elif model_name == "resnet":
-        resnet = timm.create_model("resnet18", pretrained=True)
+        resnet = timm.create_model("resnet18", pretrained=pretrained)
         if freeze:
             for param in resnet.parameters():
                 param.requires_grad = False
