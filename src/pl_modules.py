@@ -99,7 +99,9 @@ class BasicClassificationModule(pl.LightningModule):
         self.scheduler_name = scheduler_name
         self.slide_info = {"idx": [], "y_hat": None, "true": None}
         self.logdir = logdir
+
         self.main_device = "cuda:0"
+
         self.count_lumA_0 = 0
         self.count_lumA_1 = 0
         self.count_lumB_0 = 0
@@ -108,17 +110,6 @@ class BasicClassificationModule(pl.LightningModule):
     def forward(self, x: Tensor) -> Tensor:
 
         return self.model(x.squeeze(1))  # .squeeze(1)
-
-    def common_step(self, batch):
-
-        image = batch["image"]
-        slide_idx = batch["idx"]
-        target = batch["target"]
-        y_hat = self(image)
-        print(y_hat.squeeze(), target.float())
-        loss = self.loss(y_hat.squeeze(), target.float())
-
-        return loss, y_hat, target.int(), slide_idx, image
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
 
@@ -132,11 +123,6 @@ class BasicClassificationModule(pl.LightningModule):
 
         return loss
 
-    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
-        self.roc(y_hat, y)
-        self.cm(y_hat, y)
-        self.metrics(y_hat, y.int())
-
     def validation_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int):
 
         loss, y_hat, y, slide_idx, images = self.common_step(batch)
@@ -144,16 +130,9 @@ class BasicClassificationModule(pl.LightningModule):
         self.log(f"val_loss", loss, sync_dist=True)
         # print(slide_idx)
 
+        self.concat_info(slide_idx, y_hat, y)
+
         # at first slide info is a dict with empty values
-        if len(self.slide_info["idx"]) == 0:
-            self.slide_info["idx"] = slide_idx
-            self.slide_info["y_hat"] = y_hat
-            self.slide_info["true"] = y.int()
-        # after first checking it is possible concatenate the tensors
-        else:
-            self.slide_info["idx"] = torch.cat((self.slide_info["idx"], slide_idx), 0)
-            self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
-            self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
 
         preds = torch.sigmoid(y_hat)
 
@@ -163,40 +142,12 @@ class BasicClassificationModule(pl.LightningModule):
             or self.count_lumB_1 < 4
             or self.count_lumA_0 < 4
         ):
-            for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
-                if taget == 1 and pred < 0.1:
-                    if self.count_lumB_0 < 10:
-                        self.log_images(
-                            image,
-                            title=f"/Mauvaise classification de luminal B slide_idx:{slide_id} prediction:{pred}",
-                        )
-                        self.count_lumB_0 += 1
+            self.log_image_check(preds, y, images, slide_idx)
 
-                # if taget == 1 and pred > 0.9:
-                #     if self.count_lumB_1 < 4:
-                #         self.log_images(
-                #             image,
-                #             title=f"/Bonne classification de luminal B slide_idx:{slide_id} prediction:{pred}",
-                #         )
-                #         self.count_lumB_1 += 1
-                # if taget == 0 and pred < 0.1:
-                #     if self.count_lumA_0 < 4:
-                #         self.log_images(
-                #             image,
-                #             title=f"/Bonne classification de luminal A slide_idx:{slide_id} prediction:{pred}",
-                #         )
-                #         self.count_lumA_0 += 1
-                if taget == 0 and pred > 0.9:
-                    if self.count_lumA_1 < 10:
-                        self.log_images(
-                            image,
-                            title=f"/Mauvaise classification de luminal A slide_idx:{slide_id} prediction:{pred}",
-                        )
-                        self.count_lumA_1 += 1
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
         #     self.log_images(x, y, y_hat, batch_idx)
 
-        self.update_metrics(preds, y)
+        self.update_metrics(preds.squeeze(), y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
 
@@ -208,6 +159,32 @@ class BasicClassificationModule(pl.LightningModule):
         self.count_lumB_1 = 0
 
         # self.temp_dict = {}
+
+    def common_step(self, batch):
+
+        image = batch["image"]
+        slide_idx = batch["idx"]
+        target = batch["target"]
+        y_hat = self(image)
+        loss = self.loss(y_hat.squeeze(), target.float())
+
+        return loss, y_hat, target.int(), slide_idx, image
+
+    def concat_info(self, slide_idx, y_hat, y):
+        if len(self.slide_info["idx"]) == 0:
+            self.slide_info["idx"] = slide_idx
+            self.slide_info["y_hat"] = y_hat
+            self.slide_info["true"] = y.int()
+        # after first checking it is possible concatenate the tensors
+        else:
+            self.slide_info["idx"] = torch.cat((self.slide_info["idx"], slide_idx), 0)
+            self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
+            self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
+
+    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
+        self.roc(y_hat, y)
+        self.cm(y_hat, y)
+        self.metrics(y_hat, y.int())
 
     def compute_slide_metrics(self):
 
@@ -292,18 +269,6 @@ class BasicClassificationModule(pl.LightningModule):
             }
             return tamp_sched
 
-    def log_images(self, x: Tensor, title: str):
-        # sample_imgs = torch.zeros([100, 100, 3])  #
-        sample_imgs = x
-        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
-        image = to_pil_image(sample_imgs, "RGB")
-        image.save(self.logdir + title + ".png")
-        # self.logger.experiment.log_image(
-        #     sample_imgs,
-        #     name=title,
-        #     step=self.current_epoch,
-        # )
-
     def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
         log = {}
         app = f"_{suffix}" if suffix is not None else ""
@@ -338,3 +303,47 @@ class BasicClassificationModule(pl.LightningModule):
 
         metrics.reset()
         self.log_dict(log, on_step=False, on_epoch=True)
+
+    def log_image_check(self, preds, y, images, slide_idx):
+        for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
+            if taget == 1 and pred < 0.1:
+                if self.count_lumB_0 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/BA luminal B classe comme A:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumB_0 += 1
+
+            if taget == 1 and pred > 0.9:
+                if self.count_lumB_1 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/BB luminal B classe comme B:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumB_1 += 1
+            if taget == 0 and pred < 0.1:
+                if self.count_lumA_0 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/AA luminal A classe comme A:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumA_0 += 1
+            if taget == 0 and pred > 0.9:
+                if self.count_lumA_1 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/AB luminal A classe comme B {slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumA_1 += 1
+
+    def log_images(self, x: Tensor, title: str):
+        # sample_imgs = torch.zeros([100, 100, 3])  #
+        sample_imgs = x
+        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
+        image = to_pil_image(sample_imgs, "RGB")
+        image.save(self.logdir + title + ".png")
+        # self.logger.experiment.log_image(
+        #     sample_imgs,
+        #     name=title,
+        #     step=self.current_epoch,
+        # )
