@@ -1,6 +1,6 @@
-import numpy as np
+import sys
 import pytorch_lightning as pl
-from typing import List, Optional, Dict, Callable, Sequence, Tuple, Union
+from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
 from torch.optim import Optimizer, AdamW
 import torch
@@ -10,12 +10,14 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     _LRScheduler,
 )
-from torchvision.utils import make_grid, draw_bounding_boxes, draw_segmentation_masks
+from torchmetrics import ROC, ConfusionMatrix
+from torchmetrics.functional import auc
 from torchvision.transforms.functional import to_pil_image
 from torchmetrics import Metric, MetricCollection
 from pathaia.util.basic import ifnone
 
 from src.losses import get_loss_name
+import json
 
 
 def get_scheduler_func(
@@ -70,6 +72,8 @@ class BasicClassificationModule(pl.LightningModule):
         wd: float,
         scheduler_func: Optional[Callable] = None,
         metrics: Optional[Sequence[Metric]] = None,
+        scheduler_name=None,
+        logdir=None,
     ):
         """_summary_
 
@@ -89,39 +93,162 @@ class BasicClassificationModule(pl.LightningModule):
         self.wd = wd
         self.scheduler_func = scheduler_func
         self.metrics = MetricCollection(ifnone(metrics, []))
+        self.cm = ConfusionMatrix(num_classes=2, compute_on_step=False)
+        self.roc = ROC(compute_on_step=False)
+        self.temp_dict = {}
+        self.scheduler_name = scheduler_name
+        self.slide_info = {"idx": [], "y_hat": None, "true": None}
+        self.logdir = logdir
+
+        self.main_device = "cuda:0"
+
+        self.count_lumA_0 = 0
+        self.count_lumA_1 = 0
+        self.count_lumB_0 = 0
+        self.count_lumB_1 = 0
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.model(x).squeeze(1)
+
+        return self.model(x.squeeze(1))  # .squeeze(1)
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
-        x, y = batch
-        y_hat = self(x)
 
-        loss = self.loss(y_hat, y.float())
+        loss, _, _, _, _ = self.common_step(batch)
 
         self.log(f"train_loss_{get_loss_name(self.loss)}", loss)
-        if self.sched is not None:
-            self.log("learning_rate", self.sched["scheduler"].get_last_lr()[0])
+
+        if self.scheduler_func is not None:
+
+            self.log("learning_rate", self.opt.param_groups[0]["lr"])
+
         return loss
 
-    def validation_step(
-        self, batch: Tuple[Tensor, Tensor], batch_idx: int, *args, **kwargs
-    ):
-        x, y = batch
-        y_hat = self(x)
+    def validation_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int):
 
-        loss = self.loss(y_hat, y.float())
-        self.log(f"val_loss_{get_loss_name(self.loss)}", loss, sync_dist=True)
+        loss, y_hat, y, slide_idx, images = self.common_step(batch)
 
-        y_hat = torch.sigmoid(y_hat)
+        self.log(f"val_loss", loss, sync_dist=True)
+        # print(slide_idx)
+
+        self.concat_info(slide_idx, y_hat, y)
+
+        # at first slide info is a dict with empty values
+
+        preds = torch.sigmoid(y_hat)
+
+        if (
+            self.count_lumB_0 < 4
+            or self.count_lumA_1 < 4
+            or self.count_lumB_1 < 4
+            or self.count_lumA_0 < 4
+        ):
+            self.log_image_check(preds, y, images, slide_idx)
+
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
         #     self.log_images(x, y, y_hat, batch_idx)
 
-        self.metrics(y_hat, y.int())
+        self.update_metrics(preds.squeeze(), y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
-        print(self.metrics.compute())
-        self.log_dict(self.metrics.compute(), sync_dist=True)
+
+        self.log_metrics(self.metrics, self.cm, self.roc, suffix="patch")
+        self.compute_slide_metrics()
+        self.count_lumA_0 = 0
+        self.count_lumA_1 = 0
+        self.count_lumB_0 = 0
+        self.count_lumB_1 = 0
+
+        # self.temp_dict = {}
+
+    def common_step(self, batch):
+
+        image = batch["image"]
+        slide_idx = batch["idx"]
+        target = batch["target"]
+        y_hat = self(image)
+        loss = self.loss(y_hat.squeeze(), target.float())
+
+        return loss, y_hat, target.int(), slide_idx, image
+
+    def concat_info(self, slide_idx, y_hat, y):
+        if len(self.slide_info["idx"]) == 0:
+            self.slide_info["idx"] = slide_idx
+            self.slide_info["y_hat"] = y_hat
+            self.slide_info["true"] = y.int()
+        # after first checking it is possible concatenate the tensors
+        else:
+            self.slide_info["idx"] = torch.cat((self.slide_info["idx"], slide_idx), 0)
+            self.slide_info["y_hat"] = torch.cat((self.slide_info["y_hat"], y_hat), 0)
+            self.slide_info["true"] = torch.cat((self.slide_info["true"], y.int()), 0)
+
+    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
+        self.roc(y_hat, y)
+        self.cm(y_hat, y)
+        self.metrics(y_hat, y.int())
+
+    def compute_slide_metrics(self):
+
+        # all the slide ids are put in a dictionary with empty values
+        y_hat_slide = {int(i.cpu().numpy()): [] for i in self.slide_info["idx"]}
+        target_slide = {int(i.cpu().numpy()): -1 for i in self.slide_info["idx"]}
+
+        # the two dictionaries are populated by the info
+        for i, idx in enumerate(self.slide_info["idx"]):
+            cpu_idx = int(idx.cpu().numpy())
+            if isinstance(y_hat_slide[cpu_idx], list):
+                y_hat_slide[cpu_idx] = self.slide_info["y_hat"][i : i + 1]
+
+            else:
+                y_hat_slide[cpu_idx] = torch.cat(
+                    (y_hat_slide[cpu_idx], self.slide_info["y_hat"][i : i + 1]), dim=0
+                )
+            target_slide[cpu_idx] = self.slide_info["true"][i]
+
+        pred_slide_mean = []
+        pred_slide_vote = []
+        t = self.current_epoch
+
+        patches_predictions = {cpu_idx: y_hat for cpu_idx, y_hat in y_hat_slide.items()}
+
+        for y_hat in y_hat_slide.values():
+            pred_slide_mean.append(y_hat.mean(0))
+
+        pred_slide_mean = torch.Tensor(pred_slide_mean)
+
+        # slide_prediction = pred_slide_mean.cpu.numpy.to_list()
+        patches_predictions_hashable = {
+            cpu_idx: y_hat.cpu().numpy().tolist()
+            for cpu_idx, y_hat in y_hat_slide.items()
+        }
+
+        sample = {
+            "prediction_slide": pred_slide_mean.cpu().numpy().tolist(),
+            "prediction_patch": patches_predictions_hashable,
+        }
+        # the results are saved in a json
+        with open(self.logdir + f"/result__{t}.json", "w") as fp:
+            json.dump(sample, fp)
+
+        targets = torch.LongTensor(list(target_slide.values()))
+
+        print(torch.sigmoid(pred_slide_mean), targets)
+        pred = torch.sigmoid(pred_slide_mean)
+
+        # the metrics are reseted then compute them
+        self.metrics.reset()
+        self.cm.reset()
+        self.roc.reset()
+
+        self.update_metrics(pred.to(self.main_device), targets.to(self.main_device))
+
+        # self.log_dict(self.metrics.compute(), sync_dist=True)
+        self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide_mean")
+
+        # self.metrics(pred_slide_vote, targets)
+        # self.roc(pred_slide_vote, targets)
+        # self.cm(pred_slide_vote, targets)
+        # # self.log_dict(self.metrics.compute(), sync_dist=True)
+        # self.log_metrics(self.metrics, self.cm, self.roc, suffix="slide_vote")
 
     def configure_optimizers(
         self,
@@ -134,21 +261,89 @@ class BasicClassificationModule(pl.LightningModule):
             return self.opt
         else:
             self.sched = self.scheduler_func(self.opt)
-            return {"optimizer": self.opt, "lr_scheduler": self.sched}
+            tamp_sched = {
+                "optimizer": self.opt,
+                "scheduler": self.scheduler_func(self.opt),
+                "monitor": "val_loss",
+                "interval": "epoch",
+            }
+            return tamp_sched
 
-    def log_images(self, x: Tensor, y: Tensor, y_hat: Tensor, batch_idx: int):
-        y = y[:, None].repeat(1, 3, 1, 1)
-        y_hat = y_hat[:, None].repeat(1, 3, 1, 1)
-        sample_imgs = torch.cat((x, y, y_hat))
-        grid = make_grid(sample_imgs, y.shape[0])
-        self.logger.experiment.log_image(
-            to_pil_image(grid),
-            f"val_image_sample_{self.current_epoch}_{batch_idx}",
-            step=self.current_epoch,
-        )
+    def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
+        log = {}
+        app = f"_{suffix}" if suffix is not None else ""
+        metric_dict = metrics.compute()
+        print(metrics.compute())
+        for metric in metric_dict:
+            val = metric_dict[metric]
+            log[metric + app] = val
+        if cm:
 
-    # def freeze_encoder(self):
-    #     for m in named_leaf_modules(self.model):
-    #         if "encoder" in m.name and not isinstance(m, nn.BatchNorm2d):
-    #             for param in m.parameters():
-    #                 param.requires_grad = False
+            if not self.trainer.sanity_checking:
+                mat = cm.compute().cpu().numpy()
+                self.logger.experiment.log_confusion_matrix(
+                    # labels=self.hparams.classes,
+                    matrix=mat,
+                    step=self.global_step,
+                    epoch=self.current_epoch,
+                    file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
+                )
+                fprs, tprs, _ = roc.compute()
+
+                self.logger.experiment.log_curve(
+                    f"ROC{app}_{self.current_epoch}",
+                    x=fprs.tolist(),
+                    y=tprs.tolist(),
+                    step=self.current_epoch,
+                    overwrite=False,
+                )
+                log[f"AUC{app}"] = auc(fprs, tprs)
+                cm.reset()
+                roc.reset()
+
+        metrics.reset()
+        self.log_dict(log, on_step=False, on_epoch=True)
+
+    def log_image_check(self, preds, y, images, slide_idx):
+        for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
+            if taget == 1 and pred < 0.1:
+                if self.count_lumB_0 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/BA luminal B classe comme A:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumB_0 += 1
+
+            if taget == 1 and pred > 0.9:
+                if self.count_lumB_1 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/BB luminal B classe comme B:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumB_1 += 1
+            if taget == 0 and pred < 0.1:
+                if self.count_lumA_0 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/AA luminal A classe comme A:{slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumA_0 += 1
+            if taget == 0 and pred > 0.9:
+                if self.count_lumA_1 < 10:
+                    self.log_images(
+                        image * 255,
+                        title=f"/AB luminal A classe comme B {slide_id} prediction:{pred[0]}",
+                    )
+                    self.count_lumA_1 += 1
+
+    def log_images(self, x: Tensor, title: str):
+        # sample_imgs = torch.zeros([100, 100, 3])  #
+        sample_imgs = x
+        # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
+        image = to_pil_image(sample_imgs, "RGB")
+        image.save(self.logdir + title + ".png")
+        # self.logger.experiment.log_image(
+        #     sample_imgs,
+        #     name=title,
+        #     step=self.current_epoch,
+        # )

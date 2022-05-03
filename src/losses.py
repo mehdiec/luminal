@@ -18,7 +18,8 @@ def get_loss(name: str) -> nn.Module:
     split_name = name.split("_")
     if split_name[0] == "bce":
         return nn.BCEWithLogitsLoss()
-
+    if split_name[0] == "ce":
+        return nn.CrossEntropyLoss()
     elif split_name[0] == "sum":
         names = split_name[1::2]
         coefs = map(float, split_name[2::2])
@@ -43,7 +44,8 @@ def get_loss_name(loss: nn.Module) -> str:
     """
     if isinstance(loss, nn.BCEWithLogitsLoss):
         return "bce"
-
+    elif isinstance(loss, nn.CrossEntropyLoss):
+        return "ce"
     elif isinstance(loss, SumLosses):
         name = "sum"
         for loss_func, coef in loss.losses_with_coef:
