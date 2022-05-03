@@ -3,6 +3,7 @@ import os
 import yaml
 import pytorch_lightning as pl
 from albumentations import (
+    Normalize,
     RandomRotate90,
     Flip,
     Transpose,
@@ -15,11 +16,11 @@ from pytorch_lightning.loggers import CometLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
-from torch.utils.data import DataLoader
-from torchmetrics import Precision, Recall, Specificity, Accuracy
+from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
+from src.preprocess import load_patches
 
 from src.transforms import ToTensor
-from src import models, data_loader, pl_modules, losses, utils
+from src import models, pl_modules, losses, utils
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -50,6 +51,13 @@ def main(cfg, path_to_cfg=""):
     #     hvd.init()
     print("main")
 
+    logger = CometLogger(
+        api_key=os.environ["COMET_API_KEY"],
+        workspace="mehdiec",
+        save_dir=logdir,
+        project_name="luminal",
+        auto_metric_logging=True,
+    )
     seed_everything(workers=True)
 
     # if args.stain_matrices_folder is not None:
@@ -61,40 +69,29 @@ def main(cfg, path_to_cfg=""):
     #     stain_matrices_paths = None
 
     # check for transformation
-    transforms = None
+    transforms = [ToTensor()]
     if cfg["transform"]:
         transforms = [
+            Normalize(mean=[0.0, 0.0, 0.0], std=[1, 1, 1]),
+            # Resize(256, 256),
+            # CenterCrop(224, 224),
             Flip(),
             Transpose(),
             RandomRotate90(),
-            RandomBrightnessContrast(),
+            RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.6),
+            # transforms.CLAHE(p=0.8),
+            # HueSaturationValue(
+            #     hue_shift_limit=5, sat_shift_limit=15, val_shift_limit=10, p=0.6
+            # ),
             ToTensor(),
         ]
-    print("########################## dataset ##########################")
-    # load the dataset
-    train_ds = data_loader.ClassificationDataset(
-        cfg["slide_file"], transforms=transforms, noted=cfg["noted"]
-    )
-    val_ds = data_loader.ClassificationDataset(
-        cfg["slide_file"],
-        split="valid",
-        transforms=[
-            ToTensor(),
-        ],
+
+    train_dl, val_dl = load_patches(
+        slide_file=cfg["slide_file"],
         noted=cfg["noted"],
-    )
-
-    # sampler = data_loader.BalancedRandomSampler(train_ds, p_pos=1)
-    print("########################## loader ##########################")
-    train_dl = DataLoader(
-        train_ds,
-        batch_size=cfg["batch_size"],
-        num_workers=cfg["num_workers"],
-        shuffle=True,
-    )
-
-    val_dl = DataLoader(
-        val_ds,
+        level=cfg["level"],
+        transforms=transforms,
+        normalize=cfg["normalize"],
         batch_size=cfg["batch_size"],
         num_workers=cfg["num_workers"],
     )
@@ -109,7 +106,7 @@ def main(cfg, path_to_cfg=""):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model
-    model = models.build_model(cfg["model"], 1, cfg["freeze"])
+    model = models.build_model(cfg["model"], 1, cfg["freeze"], cfg["pretrained"])
 
     # creating unique log folder
     logfolder_temp = Path(cfg["logfolder"])
@@ -118,8 +115,9 @@ def main(cfg, path_to_cfg=""):
     print("Logging to {}".format(logdir))
     if not os.path.exists(logdir):
         os.mkdir(logdir)
-    if not os.path.exists(logdir):
-        os.mkdir(logdir)
+        for i in range(7):
+            log_path = os.path.join(logdir, str(i))
+            os.mkdir(log_path)
 
     # Init pl module
     plmodule = pl_modules.BasicClassificationModule(
@@ -128,21 +126,9 @@ def main(cfg, path_to_cfg=""):
         wd=cfg["wd"],
         loss=losses.get_loss(cfg["loss"]),
         scheduler_func=scheduler_func,
-        metrics=[
-            Accuracy(),
-            Precision(),
-            Recall(),
-            Specificity(),
-        ],
+        metrics=[Accuracy(), Precision(), Recall(), Specificity(), F1Score()],
         scheduler_name=cfg["scheduler"],
         logdir=logdir,
-    )
-    logger = CometLogger(
-        api_key=os.environ["COMET_API_KEY"],
-        workspace="mehdiec",
-        save_dir=logdir,
-        project_name="luminal",
-        auto_metric_logging=True,
     )
     cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
@@ -150,6 +136,8 @@ def main(cfg, path_to_cfg=""):
     # if not args.horovod or hvd.rank() == 0:
     #     logger.experiment.add_tag(args.ihc_type)
     loss = cfg["loss"]
+
+    # checkpoint model to save
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
         monitor="val_loss",
@@ -157,13 +145,14 @@ def main(cfg, path_to_cfg=""):
         mode="min",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
+    # earlystopping
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=5, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=8, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
         gpus=1 if cfg["horovod"] else [cfg["gpu"]],
-        min_epochs=3,
+        min_epochs=10,
         max_epochs=20,
         logger=logger,
         precision=16,
