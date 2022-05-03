@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
         csv_file = Path(in_file_path.split(sep="/")[-1][:-4])
 
-        out_file_path = args.outfolder / "patch_csvs" / csv_file.with_suffix(".csv")
+        out_file_path = args.outfolder / "patch_csvs" /str(args.level)/ csv_file.with_suffix(".csv")
 
         # out_file_path = outfolder / in_file_path.relative_to(
         #     args.slidefolder
