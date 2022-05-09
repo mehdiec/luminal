@@ -51,13 +51,6 @@ def main(cfg, path_to_cfg=""):
     #     hvd.init()
     print("main")
 
-    logger = CometLogger(
-        api_key=os.environ["COMET_API_KEY"],
-        workspace="mehdiec",
-        save_dir=logdir,
-        project_name="luminal",
-        auto_metric_logging=True,
-    )
     seed_everything(workers=True)
 
     # if args.stain_matrices_folder is not None:
@@ -72,7 +65,8 @@ def main(cfg, path_to_cfg=""):
     transforms = [ToTensor()]
     if cfg["transform"]:
         transforms = [
-            Normalize(mean=[0.0, 0.0, 0.0], std=[1, 1, 1]),
+            Normalize(mean=[0, 0, 0.0], std=[1, 1, 1]),
+            # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
             # Resize(256, 256),
             # CenterCrop(224, 224),
             Flip(),
@@ -120,6 +114,13 @@ def main(cfg, path_to_cfg=""):
             os.mkdir(log_path)
 
     # Init pl module
+    logger = CometLogger(
+        api_key=os.environ["COMET_API_KEY"],
+        workspace="mehdiec",
+        save_dir=logdir,
+        project_name="luminal",
+        auto_metric_logging=True,
+    )
     plmodule = pl_modules.BasicClassificationModule(
         model,
         lr=cfg["lr"],
@@ -147,16 +148,17 @@ def main(cfg, path_to_cfg=""):
     )
     # earlystopping
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=8, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=10, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
-        gpus=1 if cfg["horovod"] else [cfg["gpu"]],
+        gpus=[cfg["gpu"]],
         min_epochs=10,
-        max_epochs=20,
+        max_epochs=50,
         logger=logger,
         precision=16,
         accumulate_grad_batches=cfg["grad_accumulation"],
+        auto_select_gpus=True,
         callbacks=[ckpt_callback, early_stop_callback],
         # strategy="horovod" if args.horovod else None,
     )
