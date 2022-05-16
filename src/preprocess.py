@@ -1,4 +1,4 @@
-from albumentations import Normalize, Lambda
+from albumentations import Normalize, Lambda, Resize
 import torch
 
 from torch.utils.data import DataLoader
@@ -88,9 +88,9 @@ def load_patches(
     normalize=False,
 ):
     transforms_val = [
-        Normalize(
-            mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0]
-        ),
+        # Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0]),
+        # Normalize(mean=[0.8459, 0.7529, 0.8145], std=[0.1182, 0.1480, 0.1139]),
+        # Resize(384, 384),
         # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
         ToTensor(),
     ]
