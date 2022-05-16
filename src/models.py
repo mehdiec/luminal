@@ -158,7 +158,7 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True):
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
         infeat = resnet.fc.in_features
-        resnet.fc = nn.Linear(infeat, 1)  # make the change
+        resnet.fc = nn.Linear(infeat, num_classes)  # make the change
 
         # isolate the feature blocks
 
