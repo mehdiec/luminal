@@ -8,6 +8,10 @@ from albumentations import (
     Flip,
     Transpose,
     RandomBrightnessContrast,
+    GlassBlur,
+    CenterCrop,
+    Resize,
+    CoarseDropout,
 )
 from math import ceil
 
@@ -20,7 +24,7 @@ from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
 from src.preprocess import load_patches
 
 from src.transforms import ToTensor
-from src import models, pl_modules, losses, utils
+from src import models, pl_modules_temp, losses, utils
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -65,14 +69,17 @@ def main(cfg, path_to_cfg=""):
     transforms = [ToTensor()]
     if cfg["transform"]:
         transforms = [
-            Normalize(mean=[0, 0, 0.0], std=[1, 1, 1]),
-            # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
-            # Resize(256, 256),
+            # Normalize(mean=[0, 0, 0.0], std=[1, 1, 1]),
+            # Normalize(mean=[0.8459, 0.7529, 0.8145], std=[0.1182, 0.1480, 0.1139]),
+            # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            # Resize(384, 384),
             # CenterCrop(224, 224),
             Flip(),
             Transpose(),
             RandomRotate90(),
-            RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.6),
+            RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.5),
+            # CoarseDropout(),
+            # GlassBlur(),
             # transforms.CLAHE(p=0.8),
             # HueSaturationValue(
             #     hue_shift_limit=5, sat_shift_limit=15, val_shift_limit=10, p=0.6
@@ -92,7 +99,7 @@ def main(cfg, path_to_cfg=""):
     print("loaded")
 
     # initialize the scheduler
-    scheduler_func = pl_modules.get_scheduler_func(
+    scheduler_func = pl_modules_temp.get_scheduler_func(
         cfg["scheduler"],
         total_steps=ceil(len(train_dl) / (cfg["grad_accumulation"])) * cfg["epochs"],
         lr=cfg["lr"],
@@ -100,7 +107,12 @@ def main(cfg, path_to_cfg=""):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model
-    model = models.build_model(cfg["model"], 1, cfg["freeze"], cfg["pretrained"])
+    model = models.build_model(
+        cfg["model"],
+        cfg["num_classes"],
+        cfg["freeze"],
+        cfg["pretrained"],
+    )
 
     # creating unique log folder
     logfolder_temp = Path(cfg["logfolder"])
@@ -109,9 +121,12 @@ def main(cfg, path_to_cfg=""):
     print("Logging to {}".format(logdir))
     if not os.path.exists(logdir):
         os.mkdir(logdir)
-        for i in range(7):
+        for i in range(cfg["epochs"]):
             log_path = os.path.join(logdir, str(i))
             os.mkdir(log_path)
+            for j in range(10):
+                log_path_ind = os.path.join(log_path, str(j))
+                os.mkdir(log_path_ind)
 
     # Init pl module
     logger = CometLogger(
@@ -121,7 +136,7 @@ def main(cfg, path_to_cfg=""):
         project_name="luminal",
         auto_metric_logging=True,
     )
-    plmodule = pl_modules.BasicClassificationModule(
+    plmodule = pl_modules_temp.BasicClassificationModule(
         model,
         lr=cfg["lr"],
         wd=cfg["wd"],
@@ -130,6 +145,8 @@ def main(cfg, path_to_cfg=""):
         metrics=[Accuracy(), Precision(), Recall(), Specificity(), F1Score()],
         scheduler_name=cfg["scheduler"],
         logdir=logdir,
+        num_classes=cfg["num_classes"],
+        device=cfg["gpu"]
     )
     cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
@@ -148,7 +165,7 @@ def main(cfg, path_to_cfg=""):
     )
     # earlystopping
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=10, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=20, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
