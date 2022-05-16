@@ -11,6 +11,7 @@ from nptyping import NDArray
 from math import ceil
 from pathlib import Path
 from torchvision.transforms.functional import to_pil_image
+import cv2
 
 # from transforms import ToTensor
 
@@ -92,7 +93,7 @@ class ClassificationDataset(Dataset):
 
                             self.patches.append(Patch.from_csv_row(patch))
                             self.slide_idxs.append(slide_idx)
-                            self.labels.append(MAPPING[row["ab"]])
+                            self.labels.append(int(patch.get("label")))
                     slide_idx += 1
 
                     # delete
@@ -119,27 +120,27 @@ class ClassificationDataset(Dataset):
                 slide.read_region(patch.position, patch.level, patch.size).convert(
                     "RGB"
                 ),
-                # dtype=np.float32,
+                dtype=np.float32,
             )
             / 255.0
         )
 
         # image = to_pil_image(slide_region)
-        # image.save("oof.png")
-        # sys.exit(1)
 
         if self.transforms:
             transformed = self.transforms(image=slide_region)
 
         image_with_slide_idx = {
             "image": transformed["image"],
+            # .transpose(2, 0)
+            # .transpose(0, 1),  # .transpose(2, 0, 1),
             "idx": slide_idx,
             "target": target,
             "pos_x": patch.position.x,
             "pos_y": patch.position.y,
         }
 
-        return image_with_slide_idx  # .transpose(2, 0, 1)
+        return image_with_slide_idx  #
 
 
 class SingleSlideClassificationDataset(Dataset):
@@ -242,7 +243,7 @@ class SingleSlideClassificationDataset(Dataset):
                 slide.read_region(patch.position, patch.level, patch.size).convert(
                     "RGB"
                 ),
-                # dtype=np.float32,
+                dtype=np.float32,
             )
             / 255.0
         )

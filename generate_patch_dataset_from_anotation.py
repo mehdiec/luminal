@@ -12,6 +12,11 @@ from pathaia.util.types import Patch, Slide
 from pathaia.patches.functional_api import slide_rois_no_image
 from pathaia.patches import filter_thumbnail
 
+MAPPING = {
+    "luminal A": 0,
+    "luminal B": 1,
+}
+
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 
@@ -103,6 +108,9 @@ if __name__ == "__main__":
 
     for in_file_path in input_files:
 
+        # print(in_file_path.get("ab"))
+
+        label  = MAPPING.get(in_file_path.get("ab"))
         in_file_path = in_file_path.get("id")
 
         csv_file = Path(in_file_path.split(sep="/")[-1][:-4])
@@ -143,10 +151,10 @@ if __name__ == "__main__":
             print("in")
 
          
-        print(csv_file)
+        print(csv_file,label)
 
         with open(out_file_path, "w") as out_file:
-            writer = csv.DictWriter(out_file, fieldnames=Patch.get_fields() + ["n_pos"])
+            writer = csv.DictWriter(out_file, fieldnames=Patch.get_fields() + ["n_pos"]+["label"])
             writer.writeheader()
             for patch in patches:
                 for roi_shape in roi_shapes:
@@ -162,8 +170,16 @@ if __name__ == "__main__":
                         intersect = roi_shape.intersection(patch_shape)
                         if intersect.area/patch_shape.area>0.3:
                             row = patch.to_csv_row()
+                            row["label"] =label#MAPPING.get(in_file_path.get("label"))
                             writer.writerow(row)
-                            continue
+                            
+                    else:
+                        # print("junk")
+                        row = patch.to_csv_row()
+                        row["label"] = 2
+                        writer.writerow(row)
+                        
+                    
     
     
  
