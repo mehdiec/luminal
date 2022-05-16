@@ -56,7 +56,7 @@ parser.add_argument(
 parser.add_argument(
     "--raw_slide_path",
     type=Path,
-    default="/data/DeepLearning/SCHWOB_Robin/AprioricsSlides/slides/",
+    default="/media/AprioricsSlides/",
     help="where to get the slides",
 )
 parser.add_argument(
