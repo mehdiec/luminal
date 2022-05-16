@@ -1,4 +1,5 @@
 import sys
+from numpy import squeeze
 import pytorch_lightning as pl
 from typing import Optional, Dict, Callable, Sequence, Tuple, Union
 from torch import Tensor, nn
@@ -10,6 +11,7 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     _LRScheduler,
 )
+from PIL import Image
 from torchmetrics import ROC, ConfusionMatrix
 from torchmetrics.functional import auc
 from torchvision.transforms.functional import to_pil_image
@@ -18,6 +20,8 @@ from pathaia.util.basic import ifnone
 
 from src.losses import get_loss_name
 import json
+import cv2
+import numpy as np
 
 
 def get_scheduler_func(
@@ -107,15 +111,14 @@ class BasicClassificationModule(pl.LightningModule):
         self.logdir = logdir
 
         self.main_device = "cuda:0"
-
-        self.count_lumA_0 = 0
-        self.count_lumA_1 = 0
-        self.count_lumB_0 = 0
-        self.count_lumB_1 = 0
+        self.count_lumA_0 = {i: 0 for i in range(10)}
+        self.count_lumA_1 = {i: 0 for i in range(10)}
+        self.count_lumB_0 = {i: 0 for i in range(10)}
+        self.count_lumB_1 = {i: 0 for i in range(10)}
 
     def forward(self, x: Tensor) -> Tensor:
 
-        return self.model(x.squeeze(1))  # .squeeze(1)
+        return self.model(x.squeeze(1).float())  # .squeeze(1)
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
 
@@ -142,13 +145,13 @@ class BasicClassificationModule(pl.LightningModule):
         # at first slide info is a dict with empty values
 
         preds = torch.sigmoid(y_hat)
-
-        if (
-            self.count_lumB_0 < 10
-            or self.count_lumA_1 < 10
-            or self.count_lumB_1 < 10
-            or self.count_lumA_0 < 10
-        ):
+        count = 0
+        for i in range(10):
+            count += self.count_lumB_0[i]
+            count += self.count_lumA_1[i]
+            count += self.count_lumB_1[i]
+            count += self.count_lumA_0[i]
+        if count < 400:
             self.log_image_check(preds, y, images, slide_idx)
 
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
@@ -160,10 +163,10 @@ class BasicClassificationModule(pl.LightningModule):
 
         self.log_metrics(self.metrics, self.cm, self.roc, suffix="patch")
         self.compute_slide_metrics()
-        self.count_lumA_0 = 0
-        self.count_lumA_1 = 0
-        self.count_lumB_0 = 0
-        self.count_lumB_1 = 0
+        self.count_lumA_0 = {i: 0 for i in range(10)}
+        self.count_lumA_1 = {i: 0 for i in range(10)}
+        self.count_lumB_0 = {i: 0 for i in range(10)}
+        self.count_lumB_1 = {i: 0 for i in range(10)}
 
         # self.temp_dict = {}
 
@@ -333,42 +336,50 @@ class BasicClassificationModule(pl.LightningModule):
 
     def log_image_check(self, preds, y, images, slide_idx):
         for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
+            slide_id = int(slide_id.cpu().numpy())
             if taget == 1 and pred < 0.251:
-                if self.count_lumB_0 < 10:
+                if self.count_lumB_0[slide_id] < 10:
                     self.log_images(
                         image * 255,
-                        title=f"/BA luminal B classe comme A:{slide_id} prediction:{pred[0]}",
+                        slide_id,
+                        title=f"/BA luminal B classe comme A| prediction:{pred[0]}",
                     )
-                    self.count_lumB_0 += 1
+                    self.count_lumB_0[slide_id] += 1
 
             if taget == 1 and pred > 0.729:
-                if self.count_lumB_1 < 10:
+                if self.count_lumB_1[slide_id] < 10:
                     self.log_images(
                         image * 255,
-                        title=f"/BB luminal B classe comme B:{slide_id} prediction:{pred[0]}",
+                        slide_id,
+                        title=f"/BB luminal B classe comme B| prediction:{pred[0]}",
                     )
-                    self.count_lumB_1 += 1
+                    self.count_lumB_1[slide_id] += 1
             if taget == 0 and pred < 0.251:
-                if self.count_lumA_0 < 10:
+                if self.count_lumA_0[slide_id] < 10:
                     self.log_images(
                         image * 255,
-                        title=f"/AA luminal A classe comme A:{slide_id} prediction:{pred[0]}",
+                        slide_id,
+                        title=f"/AA luminal A classe comme A| prediction:{pred[0]}",
                     )
-                    self.count_lumA_0 += 1
+                    self.count_lumA_0[slide_id] += 1
             if taget == 0 and pred > 0.729:
-                if self.count_lumA_1 < 10:
+                if self.count_lumA_1[slide_id] < 10:
                     self.log_images(
                         image * 255,
-                        title=f"/AB luminal A classe comme B {slide_id} prediction:{pred[0]}",
+                        slide_id,
+                        title=f"/AB luminal A classe comme B| prediction:{pred[0]}",
                     )
-                    self.count_lumA_1 += 1
+                    self.count_lumA_1[slide_id] += 1
 
-    def log_images(self, x: Tensor, title: str):
+    def log_images(self, x: Tensor, slide_id: int, title: str):
         # sample_imgs = torch.zeros([100, 100, 3])  #
-        sample_imgs = x
         # print(sample_imgs.transpose(0, 1).transpose(1, 2).shape)
-        image = to_pil_image(sample_imgs, "RGB")
-        image.save(self.logdir + title + ".png")
+        # b, g, r = image.split()
+        # image = Image.merge("RGB", (r, g, b))
+        a = self.logdir + f"/{self.current_epoch}/{slide_id}" + title + ".png"
+        if not cv2.imwrite(a, np.transpose(x.cpu().numpy(), (1, 2, 0))):
+            raise Exception("Could not write image")
+
         # self.logger.experiment.log_image(
         #     sample_imgs,
         #     name=title,
