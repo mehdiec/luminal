@@ -84,18 +84,24 @@ def load_patches(
     level,
     batch_size,
     num_workers,
+    patch_size=1024,
     transforms=[],
     normalize=False,
 ):
-    transforms_val = [
-        # Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0]),
-        # Normalize(mean=[0.8459, 0.7529, 0.8145], std=[0.1182, 0.1480, 0.1139]),
-        # Resize(384, 384),
-        # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
-        ToTensor(),
-    ]
+    if patch_size == 2048:
+        transforms_val = [
+            # Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0]),
+            # Normalize(mean=[0.8459, 0.7529, 0.8145], std=[0.1182, 0.1480, 0.1139]),
+            Resize(1024, 1024),
+            # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
+            # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            # Resize(384, 384),
+            ToTensor(),
+        ]
+    else:
+        transforms_val = [ToTensor()]
 
-    train_ds = data_loader.ClassificationDataset(slide_file, noted=noted, level=level)
+    # train_ds = data_loader.ClassificationDataset(slide_file, noted=noted, level=level)
     if normalize:
 
         normalizing_dataset = DatasetTransformer(train_ds, ToTensor())
@@ -115,7 +121,11 @@ def load_patches(
 
         # load the dataset
     train_ds = data_loader.ClassificationDataset(
-        slide_file, transforms=transforms, noted=noted, level=level
+        slide_file,
+        transforms=transforms,
+        noted=noted,
+        level=level,
+        patch_size=patch_size,
     )
     val_ds = data_loader.ClassificationDataset(
         slide_file,
@@ -123,6 +133,7 @@ def load_patches(
         transforms=transforms_val,
         noted=noted,
         level=level,
+        patch_size=patch_size,
     )
 
     train_dl = DataLoader(
