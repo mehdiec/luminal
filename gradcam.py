@@ -62,26 +62,7 @@ args = parser.parse_args()
 if __name__ == "__main__":
     name = args.path_model
 
-    # name  = "/data/DeepLearning/mehdi/log/luminal/resnet_85/luminal/2a71a50204c84260936997a0cef2cd27/checkpoints/epoch=16-val_loss_bce=0.000.ckpt"
-    # name  = "/data/DeepLearning/mehdi/log/luminal/resnet_85/luminal/2a71a50204c84260936997a0cef2cd27/checkpoints/epoch=16-val_loss_bce=0.000.ckpt"
-    name  = "/data/DeepLearning/mehdi/log/luminal/resnet_145/luminal/b8f8b937e8a74156840152cbd38cc402/checkpoints/epoch=15-val_loss_bce=0.000.ckpt"
-    name  = "/data/DeepLearning/mehdi/log/luminal/resnet_145/luminal/b8f8b937e8a74156840152cbd38cc402/checkpoints/epoch=15-val_loss_bce=0.000.ckpt"
-    name  = "/data/DeepLearning/mehdi/log/luminal/resnet_159/luminal/324ca250a42945b8870334e04b1c7483/checkpoints/epoch=4-val_loss_bce=0.000.ckpt"
-    name  = "/data/DeepLearning/mehdi/log/luminal/resnet_84/luminal/0f86cca6485e475dbf1c9fa736074684/checkpoints/last.ckpt"
-    name  = "/data/DeepLearning/mehdi/log/luminal/resnet_159/luminal/324ca250a42945b8870334e04b1c7483/checkpoints/last.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_224/luminal/90a1604aa3624a7c949c9ae3766b8c23/checkpoints/epoch=14-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_224/luminal/90a1604aa3624a7c949c9ae3766b8c23/checkpoints/epoch=14-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_222/luminal/75c76b7e423b456592a60e365f7f614a/checkpoints/epoch=5-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_236/luminal/66180dffcd14476492e1c94f2987e664/checkpoints/epoch=5-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_241/luminal/7145ed546fc140d58c7d3981dabc2585/checkpoints/epoch=5-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_241/luminal/7145ed546fc140d58c7d3981dabc2585/checkpoints/epoch=5-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_224/luminal/90a1604aa3624a7c949c9ae3766b8c23/checkpoints/epoch=14-val_loss_ce=0.000.ckpt"
-    name = "/data/DeepLearning/mehdi/log/luminal/resnet_265/luminal/1dedd14a647d40828a69e71b8b501366/checkpoints/epoch=6-val_loss_ce=0.000.ckpt"
-    data_root = "/data/DeepLearning/mehdi/log/luminal/resnet_236/5/0"
-    data_root ="/data/DeepLearning/mehdi/log/luminal/resnet_241/5/1"
-    data_root ="/data/DeepLearning/mehdi/log/luminal/resnet_241/5/2"
-    data_root =  "/data/DeepLearning/mehdi/log/luminal/resnet_241/5/0"
-    data_root = "/data/DeepLearning/mehdi/log/luminal/resnet_224/14/3"
+    
     data_roots =  [f"/data/DeepLearning/mehdi/log/luminal/{args.model_name}/{args.epoch}/{i}" for i in range(10) ]
     num_classes = args.num_classes
 
