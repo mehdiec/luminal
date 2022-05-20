@@ -1,6 +1,9 @@
 from torch import nn
 import torch
 import timm
+from vit_pytorch import ViT
+
+# from coatnet import CoAtNet
 
 # from transformers import ViTForImageClassification
 
@@ -61,6 +64,93 @@ class VanillaCNN(nn.Module):
         return y
 
 
+class ViTBase16(nn.Module):
+    def __init__(self, num_classes, pretrained=False, load=None):
+
+        super(ViTBase16, self).__init__()
+
+        self.model = timm.create_model("vit_base_patch16_384", pretrained=True)
+        if load:
+            self.model.load_state_dict(torch.load(load))
+
+        self.model.head = nn.Linear(self.model.head.in_features, num_classes)
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class ResNet(nn.Module):
+    def __init__(self, num_classes, pretrained=True):
+        super(ResNet, self).__init__()
+
+        # define the resnet152
+        self.resnet = timm.create_model("resnet18", pretrained=pretrained)
+        infeat = 512  # self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(infeat, num_classes)  # make the change
+
+        # isolate the feature blocks
+
+        self.conv1 = self.resnet.conv1
+        self.bn1 = self.resnet.bn1
+        self.act1 = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(
+            kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False
+        )
+
+        self.layer1 = self.resnet.layer1
+        self.layer2 = self.resnet.layer2
+        self.layer3 = self.resnet.layer3
+        self.layer4 = self.resnet.layer4
+
+        # average pooling layer
+        self.global_pool = self.resnet.global_pool
+
+        # classifier
+        self.fc = nn.Sequential(
+            nn.Dropout2d(0.5), nn.Linear(infeat, num_classes)
+        )  # nn.Linear(infeat, num_classes)#=nn.Linear(infeat, num_classes)# nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))# nn.Linear(infeat, num_classes)
+
+        # gradient placeholder
+        self.gradient = None
+
+    # hook for the gradients
+    def activations_hook(self, grad):
+        self.gradient = grad
+
+    def get_gradient(self):
+        return self.gradient
+
+    def get_activations(self, x):
+        return self.forward_conv(x)
+
+    def forward_conv(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.act1(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        return x
+
+    def forward(self, x):
+
+        # extract the features
+        x = self.forward_conv(x)
+
+        # register the hook
+        h = x.register_hook(self.activations_hook)
+
+        # complete the forward pass
+        x = self.global_pool(x)
+
+        x = self.fc(x)
+
+        return x
+
+
 def build_model(model_name, num_classes, freeze=False, pretrained=True):
     model = None
 
@@ -69,14 +159,47 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True):
 
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
+        infeat = resnet.fc.in_features
+        resnet.fc = nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))
+
+        # resnet.fc = nn.Linear(infeat, num_classes)  # make the change
+
+        # isolate the feature blocks
+
         if freeze:
             for param in resnet.parameters():
                 param.requires_grad = False
 
-        infeat = resnet.fc.in_features
-        resnet.fc = nn.Linear(infeat, num_classes)
         # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         model = resnet
+    elif model_name == "vit":
+        model = ViTBase16(num_classes=1)
+    elif model_name == "mobilenet":
+        # resnet = timm.create_model("mobilenetv2_140", pretrained=pretrained)
+        # if freeze:
+        #     for param in resnet.parameters():
+        #         param.requires_grad = False
+
+        # infeat = resnet.classifier.in_features
+        # resnet.classifier = nn.Linear(infeat, num_classes)
+        resnet = ResNet(1, pretrained)
+        model = resnet
+        # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # model = ViT(
+        #     image_size=1024,
+        #     patch_size=64,
+        #     num_classes=1,
+        #     dim=1,
+        #     depth=12,
+        #     heads=12,
+        #     mlp_dim=3072,
+        #     dropout=0.0,
+        #     emb_dropout=0.1,
+        # )
+    # elif model_name == "coat":
+
+    #     model = CoAtNet(in_ch=3, image_size=1024)
 
     # elif model_name == "vit":
     #     model = ViTForImageClassification.from_pretrained(

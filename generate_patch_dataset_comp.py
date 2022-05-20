@@ -12,11 +12,6 @@ from pathaia.util.types import Patch, Slide
 from pathaia.patches.functional_api import slide_rois_no_image
 from pathaia.patches import filter_thumbnail
 
-MAPPING = {
-    "luminal A": 0,
-    "luminal B": 1,
-}
-
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 
@@ -25,14 +20,14 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument(
     "--outfolder",
     type=Path,
-    default="/data/DeepLearning/mehdi/csv_annot",
+    default="/data/DeepLearning/mehdi/csv_annot_comp",
     help="folder storing csvs",
 )
 
 parser.add_argument(
     "--patch_size",
     type=int,
-    default=2048,
+    default=1024,
     help="size of the patches",
 )
 parser.add_argument(
@@ -56,7 +51,7 @@ parser.add_argument(
 parser.add_argument(
     "--raw_slide_path",
     type=Path,
-    default="/media/AprioricsSlides/",
+    default="/data/DeepLearning/SCHWOB_Robin/AprioricsSlides/slides/",
     help="where to get the slides",
 )
 parser.add_argument(
@@ -108,20 +103,11 @@ if __name__ == "__main__":
 
     for in_file_path in input_files:
 
-        # print(in_file_path.get("ab"))
-
-        label = MAPPING.get(in_file_path.get("ab"))
         in_file_path = in_file_path.get("id")
 
         csv_file = Path(in_file_path.split(sep="/")[-1][:-4])
 
-        out_file_path = (
-            args.outfolder
-            / "patch_csvs"
-            / str(args.level)
-            / str(args.patch_size)
-            / csv_file.with_suffix(".csv")
-        )
+        out_file_path = args.outfolder / "patch_csvs" /str(args.level)/ csv_file.with_suffix(".csv")
 
         # out_file_path = outfolder / in_file_path.relative_to(
         #     args.slidefolder
@@ -144,52 +130,41 @@ if __name__ == "__main__":
             thumb_size=2000,
         )
 
-        gjson = Path(
-            "/home/mehdi/code/luminal/data/geojson_lum"
-        ) / csv_file.with_suffix(".geojson")
+
+        gjson = Path("/home/mehdi/code/luminal/data/geojson_lum") / csv_file.with_suffix(".geojson")
         with open(gjson, "r") as f:
             shape_dict = json.load(f)
 
         print(len(shape_dict))
-        if not isinstance(shape_dict, list):
+        if not isinstance(shape_dict,list) :
             roi_shapes = [shape(shape_dict["geometry"])]
         else:
-            roi_shapes = [shape(shape_r["geometry"]) for shape_r in shape_dict]
+            roi_shapes = [shape(shape_r["geometry"]) for  shape_r in  shape_dict ]
             print("in")
 
-        print(csv_file, label)
+         
+        print(csv_file)
 
         with open(out_file_path, "w") as out_file:
-            writer = csv.DictWriter(
-                out_file, fieldnames=Patch.get_fields() + ["n_pos"] + ["label"]
-            )
+            writer = csv.DictWriter(out_file, fieldnames=Patch.get_fields() + ["n_pos"])
             writer.writeheader()
             for patch in patches:
                 for roi_shape in roi_shapes:
                     pt1 = patch.position
-                    dx = pt1.x + args.patch_size
+                    dx = pt1.x +args.patch_size
                     dy = pt1.y + args.patch_size
-                    pt2 = geometry.Point(dx, pt1.y)
-                    pt3 = geometry.Point(pt1.x, dy)
-                    pt4 = geometry.Point(dx, dy)
-                    patch_shape = Polygon([pt1, pt2, pt4, pt3])
-
+                    pt2 = geometry.Point(dx,pt1.y)
+                    pt3 = geometry.Point(pt1.x,dy)
+                    pt4 = geometry.Point(dx,dy)
+                    patch_shape = Polygon([pt1,pt2,pt4,pt3])
+            
                     if roi_shape.intersects(patch_shape):
                         intersect = roi_shape.intersection(patch_shape)
-                        if intersect.area / patch_shape.area > 0.3:
+                        if intersect.area/patch_shape.area<0.3:
                             row = patch.to_csv_row()
-                            row[
-                                "label"
-                            ] = label  # MAPPING.get(in_file_path.get("label"))
                             writer.writerow(row)
-
-                        else:
-                            # print("junk")
-                            row = patch.to_csv_row()
-                            row["label"] = 2
-                            writer.writerow(row)
-                    else:
-                        # print("junk")
-                        row = patch.to_csv_row()
-                        row["label"] = 2
-                        writer.writerow(row)
+                            continue
+    
+    
+ 
+ 

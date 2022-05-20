@@ -8,6 +8,15 @@ from albumentations import (
     Flip,
     Transpose,
     RandomBrightnessContrast,
+    GlassBlur,
+    CenterCrop,
+    Resize,
+    CoarseDropout,
+    Blur,
+    Cutout,
+    Rotate,
+    ChannelShuffle,
+    RGBShift,
 )
 from math import ceil
 
@@ -19,8 +28,10 @@ from pytorch_lightning.utilities.seed import seed_everything
 from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
 from src.preprocess import load_patches
 
-from src.transforms import ToTensor
-from src import models, pl_modules, losses, utils
+from src.transforms import StainAugmentor, ToTensor
+from src import models, pl_modules_temp, losses, utils
+
+shuft = 30 / 255
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -51,13 +62,6 @@ def main(cfg, path_to_cfg=""):
     #     hvd.init()
     print("main")
 
-    logger = CometLogger(
-        api_key=os.environ["COMET_API_KEY"],
-        workspace="mehdiec",
-        save_dir=logdir,
-        project_name="luminal",
-        auto_metric_logging=True,
-    )
     seed_everything(workers=True)
 
     # if args.stain_matrices_folder is not None:
@@ -71,20 +75,75 @@ def main(cfg, path_to_cfg=""):
     # check for transformation
     transforms = [ToTensor()]
     if cfg["transform"]:
-        transforms = [
-            Normalize(mean=[0.0, 0.0, 0.0], std=[1, 1, 1]),
-            # Resize(256, 256),
-            # CenterCrop(224, 224),
-            Flip(),
-            Transpose(),
-            RandomRotate90(),
-            RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.6),
-            # transforms.CLAHE(p=0.8),
-            # HueSaturationValue(
-            #     hue_shift_limit=5, sat_shift_limit=15, val_shift_limit=10, p=0.6
-            # ),
-            ToTensor(),
-        ]
+        if cfg["patch_size"] == 2048:
+            transforms = [
+                Resize(1024, 1024),
+                # Resize(384, 384),
+                Flip(),
+                Transpose(),
+                RandomRotate90(),
+                ChannelShuffle(always_apply=False, p=0.5),
+                RandomBrightnessContrast(
+                    brightness_limit=0.2,
+                    contrast_limit=(-0.3, 0.05),
+                    brightness_by_max=True,
+                    always_apply=False,
+                    p=0.8,
+                ),
+                RGBShift(
+                    always_apply=False,
+                    p=0.5,
+                    r_shift_limit=(-shuft, shuft),
+                    g_shift_limit=(-shuft, shuft),
+                    b_shift_limit=(-shuft, shuft),
+                ),
+                Blur(always_apply=False, p=0.5, blur_limit=(3, 4)),
+                # Cutout(
+                #     always_apply=False,
+                #     p=0.5,
+                #     num_holes=40,
+                #     max_h_size=60,
+                #     max_w_size=60,
+                #     fill_value=(1, 1, 1),
+                # ),
+                # Rotate(always_apply=False, p=.5, limit=(-10, 10), interpolation=4, border_mode=2, value=(0, 0, 0), mask_value=None),
+                # Rotate(
+                #     always_apply=False,
+                #     p=0.8,
+                #     limit=(-90, 314),
+                #     interpolation=2,
+                #     border_mode=0,
+                #     value=(1, 1, 1),
+                #     mask_value=None,
+                # ),
+                # StainAugmentor(),
+                # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensor(),
+                # RandomSunFlare(flare_roi=(0, 0, 1, 1), angle_lower=0.5, p=1,src_color=(255, 255, 255)),
+            ]
+        else:
+            transforms = [
+                Flip(),
+                Transpose(),
+                RandomRotate90(),
+                ChannelShuffle(always_apply=False, p=0.5),
+                RandomBrightnessContrast(
+                    brightness_limit=0.2,
+                    contrast_limit=(-0.3, 0.05),
+                    brightness_by_max=True,
+                    always_apply=False,
+                    p=0.8,
+                ),
+                RGBShift(
+                    always_apply=False,
+                    p=0.5,
+                    r_shift_limit=(-shuft, shuft),
+                    g_shift_limit=(-shuft, shuft),
+                    b_shift_limit=(-shuft, shuft),
+                ),
+                Blur(always_apply=False, p=0.5, blur_limit=(3, 4)),
+                ToTensor(),
+            ]
 
     train_dl, val_dl = load_patches(
         slide_file=cfg["slide_file"],
@@ -94,11 +153,12 @@ def main(cfg, path_to_cfg=""):
         normalize=cfg["normalize"],
         batch_size=cfg["batch_size"],
         num_workers=cfg["num_workers"],
+        patch_size=cfg["patch_size"],
     )
     print("loaded")
 
     # initialize the scheduler
-    scheduler_func = pl_modules.get_scheduler_func(
+    scheduler_func = pl_modules_temp.get_scheduler_func(
         cfg["scheduler"],
         total_steps=ceil(len(train_dl) / (cfg["grad_accumulation"])) * cfg["epochs"],
         lr=cfg["lr"],
@@ -106,7 +166,12 @@ def main(cfg, path_to_cfg=""):
 
     # model = maskrcnn_resnet50_fpn(num_classes=2)
     # Init model
-    model = models.build_model(cfg["model"], 1, cfg["freeze"], cfg["pretrained"])
+    model = models.build_model(
+        cfg["model"],
+        cfg["num_classes"],
+        cfg["freeze"],
+        cfg["pretrained"],
+    )
 
     # creating unique log folder
     logfolder_temp = Path(cfg["logfolder"])
@@ -115,12 +180,22 @@ def main(cfg, path_to_cfg=""):
     print("Logging to {}".format(logdir))
     if not os.path.exists(logdir):
         os.mkdir(logdir)
-        for i in range(7):
+        for i in range(cfg["epochs"]):
             log_path = os.path.join(logdir, str(i))
             os.mkdir(log_path)
+            for j in range(10):
+                log_path_ind = os.path.join(log_path, str(j))
+                os.mkdir(log_path_ind)
 
     # Init pl module
-    plmodule = pl_modules.BasicClassificationModule(
+    logger = CometLogger(
+        api_key=os.environ["COMET_API_KEY"],
+        workspace="mehdiec",
+        save_dir=logdir,
+        project_name="luminal",
+        auto_metric_logging=True,
+    )
+    plmodule = pl_modules_temp.BasicClassificationModule(
         model,
         lr=cfg["lr"],
         wd=cfg["wd"],
@@ -129,6 +204,8 @@ def main(cfg, path_to_cfg=""):
         metrics=[Accuracy(), Precision(), Recall(), Specificity(), F1Score()],
         scheduler_name=cfg["scheduler"],
         logdir=logdir,
+        num_classes=cfg["num_classes"],
+        device=cfg["gpu"],
     )
     cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
@@ -140,23 +217,24 @@ def main(cfg, path_to_cfg=""):
     # checkpoint model to save
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
-        monitor="val_loss",
+        monitor="Accuracy_patch",
         save_last=True,
-        mode="min",
+        mode="max",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
     # earlystopping
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=8, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=20, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
-        gpus=1 if cfg["horovod"] else [cfg["gpu"]],
+        gpus=[cfg["gpu"]],
         min_epochs=10,
-        max_epochs=20,
+        max_epochs=50,
         logger=logger,
         precision=16,
         accumulate_grad_batches=cfg["grad_accumulation"],
+        auto_select_gpus=True,
         callbacks=[ckpt_callback, early_stop_callback],
         # strategy="horovod" if args.horovod else None,
     )
