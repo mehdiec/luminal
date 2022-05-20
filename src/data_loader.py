@@ -11,6 +11,7 @@ from nptyping import NDArray
 from math import ceil
 from pathlib import Path
 from torchvision.transforms.functional import to_pil_image
+import cv2
 
 # from transforms import ToTensor
 
@@ -32,6 +33,8 @@ class ClassificationDataset(Dataset):
         split: str = "train",
         noted: bool = False,
         level: int = 0,
+        patch_size: int = 1024,
+        num_classes: int = 2,
     ):
         """_summary_
 
@@ -52,6 +55,7 @@ class ClassificationDataset(Dataset):
         self.split = []
         # info added to identify each patch to e=its coresponding slide
         self.slide_idxs = []
+        self.labels_slide = []
 
         slide_idx = 0
         self.noted = noted
@@ -68,6 +72,8 @@ class ClassificationDataset(Dataset):
             ) in (
                 reader
             ):  # we read each row of our csv to get the right slide for the right split
+                cnt_2 = 0
+                cnt = 0
                 # print(outfolder)
                 if row["split"] == split:
                     slide_path = row["id"]
@@ -80,6 +86,7 @@ class ClassificationDataset(Dataset):
                         outfolder
                         / "patch_csvs"
                         / str(level)
+                        / str(patch_size)
                         / csv_file.with_suffix(".csv")
                     )
                     # patches_path = (
@@ -88,15 +95,38 @@ class ClassificationDataset(Dataset):
 
                     with open(patches_path, "r") as patch_file:
                         reader = csv.DictReader(patch_file)
-                        for patch in reader:
+                        for i, patch in enumerate(reader):
+                            if num_classes == 3:
+                                if int(patch.get("label")) == 2 and (
+                                    cnt_2 < 10000000000 or cnt_2 < cnt * 10000000
+                                ):
+                                    self.patches.append(Patch.from_csv_row(patch))
+                                    self.slide_idxs.append(slide_idx)
+                                    self.labels.append(int(patch.get("label")))
+                                    self.labels_slide.append(MAPPING[row["ab"]])
 
-                            self.patches.append(Patch.from_csv_row(patch))
-                            self.slide_idxs.append(slide_idx)
-                            self.labels.append(MAPPING[row["ab"]])
+                                    cnt_2 += 1
+                                elif int(patch.get("label")) != 2:
+                                    self.patches.append(Patch.from_csv_row(patch))
+                                    self.slide_idxs.append(slide_idx)
+                                    self.labels.append(int(patch.get("label")))
+                                    self.labels_slide.append(MAPPING[row["ab"]])
+
+                                    cnt += 1
+                                else:
+                                    continue
+                            else:
+                                if int(patch.get("label")) != 2:
+                                    self.patches.append(Patch.from_csv_row(patch))
+                                    self.slide_idxs.append(slide_idx)
+                                    self.labels.append(int(patch.get("label")))
+                                    self.labels_slide.append(MAPPING[row["ab"]])
+                            # if i == 63:
+                            #     break
                     slide_idx += 1
 
-                    # delete
-                    # if slide_idx == 1:
+                    # # delete
+                    # if slide_idx == 2:
                     #     break
 
         self.transforms = Compose(ifnone(transforms, []))
@@ -112,6 +142,7 @@ class ClassificationDataset(Dataset):
         patch = self.patches[idx]
         slide_idx = self.slide_idxs[idx]
         slide = self.slides[slide_idx]
+        target_slide = self.labels_slide[idx]
         target = self.labels[idx]
 
         slide_region = (
@@ -119,27 +150,28 @@ class ClassificationDataset(Dataset):
                 slide.read_region(patch.position, patch.level, patch.size).convert(
                     "RGB"
                 ),
-                # dtype=np.float32,
+                dtype=np.float32,
             )
             / 255.0
         )
 
         # image = to_pil_image(slide_region)
-        # image.save("oof.png")
-        # sys.exit(1)
 
         if self.transforms:
             transformed = self.transforms(image=slide_region)
 
         image_with_slide_idx = {
             "image": transformed["image"],
+            # .transpose(2, 0)
+            # .transpose(0, 1),  # .transpose(2, 0, 1),
             "idx": slide_idx,
             "target": target,
             "pos_x": patch.position.x,
             "pos_y": patch.position.y,
+            "target_slide": target_slide,
         }
 
-        return image_with_slide_idx  # .transpose(2, 0, 1)
+        return image_with_slide_idx  #
 
 
 class SingleSlideClassificationDataset(Dataset):
@@ -174,6 +206,7 @@ class SingleSlideClassificationDataset(Dataset):
         self.split = []
         # info added to identify each patch to e=its coresponding slide
         self.slide_idxs = []
+        self.labels_slide = []
 
         slide_idx = 0
         self.noted = noted
@@ -216,11 +249,12 @@ class SingleSlideClassificationDataset(Dataset):
                             self.patches.append(Patch.from_csv_row(patch))
                             self.slide_idxs.append(slide_idx)
                             self.labels.append(MAPPING[row["ab"]])
+                            self.labels_slide.append(MAPPING[row["ab"]])
                     slide_idx += 1
 
                     # delete
-                    # if slide_idx == 1:
-                    #     break
+                    if slide_idx == 1:
+                        break
 
         self.transforms = Compose(ifnone(transforms, []))
 
@@ -236,13 +270,14 @@ class SingleSlideClassificationDataset(Dataset):
         slide_idx = self.slide_idxs[idx]
         slide = self.slides[slide_idx]
         target = self.labels[idx]
+        target_slide = self.labels_slide[idx]
 
         slide_region = (
             np.asarray(
                 slide.read_region(patch.position, patch.level, patch.size).convert(
                     "RGB"
                 ),
-                # dtype=np.float32,
+                dtype=np.float32,
             )
             / 255.0
         )
@@ -260,6 +295,7 @@ class SingleSlideClassificationDataset(Dataset):
             "target": target,
             "pos_x": patch.position.x,
             "pos_y": patch.position.y,
+            "target_slide": target_slide,
         }
 
         return image_with_slide_idx  # .transpose(2, 0, 1)

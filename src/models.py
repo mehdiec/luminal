@@ -86,14 +86,14 @@ class ResNet(nn.Module):
 
         # define the resnet152
         self.resnet = timm.create_model("resnet18", pretrained=pretrained)
-        infeat = 16384  # self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(infeat, 1)  # make the change
+        infeat = 512  # self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(infeat, num_classes)  # make the change
 
         # isolate the feature blocks
 
-        self.conv1 = (self.resnet.conv1,)
-        self.bn1 = (self.resnet.bn1,)
-        self.act1 = (nn.ReLU(inplace=True),)
+        self.conv1 = self.resnet.conv1
+        self.bn1 = self.resnet.bn1
+        self.act1 = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(
             kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False
         )
@@ -107,7 +107,9 @@ class ResNet(nn.Module):
         self.global_pool = self.resnet.global_pool
 
         # classifier
-        self.fc = nn.Linear(infeat, num_classes)
+        self.fc = nn.Sequential(
+            nn.Dropout2d(0.5), nn.Linear(infeat, num_classes)
+        )  # nn.Linear(infeat, num_classes)#=nn.Linear(infeat, num_classes)# nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))# nn.Linear(infeat, num_classes)
 
         # gradient placeholder
         self.gradient = None
@@ -120,7 +122,7 @@ class ResNet(nn.Module):
         return self.gradient
 
     def get_activations(self, x):
-        return self.features(x)
+        return self.forward_conv(x)
 
     def forward_conv(self, x):
         x = self.conv1(x)
@@ -158,7 +160,9 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True):
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
         infeat = resnet.fc.in_features
-        resnet.fc = nn.Linear(infeat, 1)  # make the change
+        resnet.fc = nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))
+
+        # resnet.fc = nn.Linear(infeat, num_classes)  # make the change
 
         # isolate the feature blocks
 
