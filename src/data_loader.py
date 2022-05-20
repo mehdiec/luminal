@@ -33,6 +33,7 @@ class ClassificationDataset(Dataset):
         split: str = "train",
         noted: bool = False,
         level: int = 0,
+        patch_size: int = 1024,
         num_classes: int = 2,
     ):
         """_summary_
@@ -72,6 +73,7 @@ class ClassificationDataset(Dataset):
                 reader
             ):  # we read each row of our csv to get the right slide for the right split
                 cnt_2 = 0
+                cnt = 0
                 # print(outfolder)
                 if row["split"] == split:
                     slide_path = row["id"]
@@ -84,6 +86,7 @@ class ClassificationDataset(Dataset):
                         outfolder
                         / "patch_csvs"
                         / str(level)
+                        / str(patch_size)
                         / csv_file.with_suffix(".csv")
                     )
                     # patches_path = (
@@ -94,15 +97,24 @@ class ClassificationDataset(Dataset):
                         reader = csv.DictReader(patch_file)
                         for i, patch in enumerate(reader):
                             if num_classes == 3:
-                                if int(patch.get("label")) == 2 and cnt_2 == 500:
-                                    continue
-                                else:
+                                if int(patch.get("label")) == 2 and (
+                                    cnt_2 < 10000000000 or cnt_2 < cnt * 10000000
+                                ):
                                     self.patches.append(Patch.from_csv_row(patch))
                                     self.slide_idxs.append(slide_idx)
                                     self.labels.append(int(patch.get("label")))
                                     self.labels_slide.append(MAPPING[row["ab"]])
-                                    if int(patch.get("label")) == 2:
-                                        cnt_2 += 1
+
+                                    cnt_2 += 1
+                                elif int(patch.get("label")) != 2:
+                                    self.patches.append(Patch.from_csv_row(patch))
+                                    self.slide_idxs.append(slide_idx)
+                                    self.labels.append(int(patch.get("label")))
+                                    self.labels_slide.append(MAPPING[row["ab"]])
+
+                                    cnt += 1
+                                else:
+                                    continue
                             else:
                                 if int(patch.get("label")) != 2:
                                     self.patches.append(Patch.from_csv_row(patch))
