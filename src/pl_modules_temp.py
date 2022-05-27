@@ -145,7 +145,7 @@ class BasicClassificationModule(pl.LightningModule):
 
         # at first slide info is a dict with empty values
 
-        preds = y_hat  # torch.softmax(y_hat)
+        preds = torch.softmax(y_hat, 1)  # torch.softmax(y_hat)
         count = 0
         for i in range(10):
             count += self.count_lumB_0[i]
@@ -158,7 +158,7 @@ class BasicClassificationModule(pl.LightningModule):
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
         #     self.log_images(x, y, y_hat, batch_idx)
 
-        self.update_metrics(preds.squeeze(), y)
+        self.update_metrics(preds, y)
 
     def validation_epoch_end(self, outputs: Dict[str, Tensor]):
 
@@ -181,7 +181,6 @@ class BasicClassificationModule(pl.LightningModule):
         y_slide = batch["target_slide"]
         y_hat = self(image)
         loss = self.loss(y_hat, target)  # .squeeze(),
-        y_hat = torch.softmax(y_hat, 1)
 
         return loss, y_hat, target.int(), slide_idx, image, p_x, p_y, y_slide
 
@@ -205,6 +204,7 @@ class BasicClassificationModule(pl.LightningModule):
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor):
         self.roc(y_hat, y)
         self.cm(y_hat, y)
+        # print(y_hat)
         self.metrics(y_hat, y.int())
 
     def compute_slide_metrics(self):
@@ -219,14 +219,16 @@ class BasicClassificationModule(pl.LightningModule):
         for i, idx in enumerate(self.slide_info["idx"]):
             cpu_idx = int(idx.cpu().numpy())
             if isinstance(y_hat_slide[cpu_idx], list):
-                y_hat_slide[cpu_idx] = self.slide_info["y_hat"][i : i + 1]
+
+                y_hat_slide[cpu_idx] = self.slide_info["y_hat"][i : i + 1][:, :2]
 
                 pos_x[cpu_idx] = self.slide_info["pos_x"][i : i + 1]
                 pos_y[cpu_idx] = self.slide_info["pos_y"][i : i + 1]
 
             else:
                 y_hat_slide[cpu_idx] = torch.cat(
-                    (y_hat_slide[cpu_idx], self.slide_info["y_hat"][i : i + 1]), dim=0
+                    (y_hat_slide[cpu_idx], self.slide_info["y_hat"][i : i + 1][:, :2]),
+                    dim=0,
                 )
                 pos_x[cpu_idx] = torch.cat(
                     (pos_x[cpu_idx], self.slide_info["pos_x"][i : i + 1]), dim=0
@@ -244,8 +246,12 @@ class BasicClassificationModule(pl.LightningModule):
 
         for y_hat in y_hat_slide.values():
             # print(y_hat)
+            y_hat = torch.softmax(y_hat, 1)
+            pred_slide_mean
             pred_slide_mean.append(y_hat.mean(0))
+
         print(pred_slide_mean)
+
         pred_slide_mean = torch.stack(pred_slide_mean)
         # print(pred_slide_mean.shape)
 
@@ -276,17 +282,33 @@ class BasicClassificationModule(pl.LightningModule):
             pred_slide_mean = pred_slide_mean.unsqueeze(0)
             # targets = targets.unsqueeze(0)
         print(pred_slide_mean)
-        pred = torch.softmax(pred_slide_mean, 1)
+        pred = pred_slide_mean
 
         # the metrics are reseted then compute them
-        self.metrics.reset()
+
         self.cm.reset()
         self.roc.reset()
+        print(pred.shape[0], targets.shape[0])
+        if pred.shape[0] != targets.shape[0]:
+            pred = pred.squeeze()
+        print("\n")
+        print(pred, targets)
+        print("\n")
 
-        self.update_metrics(pred.to(self.main_device), targets.to(self.main_device))
+        self.metrics(pred.to(self.main_device), targets.to(self.main_device))
 
-        # self.log_dict(self.metrics.compute(), sync_dist=True)
-        self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide_mean")
+        log = {}
+        suffix = "slide_mean"
+        app = f"_{suffix}" if suffix is not None else ""
+        metric_dict = self.metrics.compute()
+        print(self.metrics.compute())
+        for metric in metric_dict:
+            val = metric_dict[metric]
+            log[metric + app] = val
+
+        self.metrics.reset()
+        self.log_dict(log, on_step=False, on_epoch=True)
+        # self.log_metrics(self.metrics, cm=self.cm, roc=self.roc, suffix="slide_mean")
 
         # self.metrics(pred_slide_vote, targets)
         # self.roc(pred_slide_vote, targets)
@@ -308,78 +330,137 @@ class BasicClassificationModule(pl.LightningModule):
             self.sched = self.scheduler_func(self.opt)
             return {"optimizer": self.opt, "lr_scheduler": self.sched}
 
-    def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
+    # def log_metrics(self, metrics, cm=None, roc=None, suffix: str = None):
+    #     log = {}
+    #     app = f"_{suffix}" if suffix is not None else ""
+    #     metric_dict = metrics.compute()
+    #     print(metrics.compute())
+    #     for metric in metric_dict:
+    #         val = metric_dict[metric]
+    #         log[metric + app] = val
+    #     if cm:
+    #         metrics.reset()
+    #         self.log_dict(log, on_step=False, on_epoch=True)
+    #         # return
+
+    #         if not self.trainer.sanity_checking:
+    #             mat = cm.compute().cpu().numpy()
+    #             self.logger.experiment.log_confusion_matrix(
+    #                 # labels=self.hparams.classes,
+    #                 matrix=mat,
+    #                 step=self.global_step,
+    #                 epoch=self.current_epoch,
+    #                 file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
+    #             )
+    #             fprs, tprs, _ = roc.compute()
+    #             print(fprs, tprs)
+
+    #             # self.logger.experiment.log_curve(
+    #             #     f"ROC{app}_{self.current_epoch}",
+    #             #     x=fprs ,
+    #             #     y=tprs ,
+    #             #     step=self.current_epoch,
+    #             #     overwrite=False,
+    #             # )
+    #             log[f"AUC{app}"] = auc(fprs, tprs)
+    #             cm.reset()
+    #             roc.reset()
+
+    def log_metrics(self, metrics, cm, roc, suffix: str = None):
+        classes = ["luminal A", "luminal B", "other"]
         log = {}
         app = f"_{suffix}" if suffix is not None else ""
         metric_dict = metrics.compute()
-        print(metrics.compute())
         for metric in metric_dict:
             val = metric_dict[metric]
-            log[metric + app] = val
-        if cm:
-            metrics.reset()
-            self.log_dict(log, on_step=False, on_epoch=True)
-            return
-
-            if not self.trainer.sanity_checking:
-                mat = cm.compute().cpu().numpy()
-                self.logger.experiment.log_confusion_matrix(
-                    # labels=self.hparams.classes,
-                    matrix=mat,
-                    step=self.global_step,
-                    epoch=self.current_epoch,
-                    file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
+            if val.numel() == 1:
+                log[metric + app] = val
+            else:
+                for k, cl in enumerate(classes):
+                    c_name = f"{metric}{app}_{cl}"
+                    log[c_name] = val[k]
+                log[f"{metric}{app}_mean"] = val.mean()
+        if not self.trainer.sanity_checking:
+            mat = cm.compute().cpu().numpy()
+            self.logger.experiment.log_confusion_matrix(
+                labels=classes,
+                matrix=mat,
+                step=self.global_step,
+                epoch=self.current_epoch,
+                file_name=f"confusion_matrix{app}_{self.current_epoch}.json",
+            )
+            fprs, tprs, _ = roc.compute()
+            for cl, fpr, tpr in zip(classes[::-1], fprs[::-1], tprs[::-1]):
+                fpr = fpr
+                tpr = tpr
+                self.logger.experiment.log_curve(
+                    f"ROC{app}_{cl}_{self.current_epoch}",
+                    x=fpr.tolist(),
+                    y=tpr.tolist(),
+                    step=self.current_epoch,
+                    overwrite=False,
                 )
-                fprs, tprs, _ = roc.compute()
-                print(fprs, tprs)
+                log[f"AUC{app}_{cl}"] = auc(fpr, tpr)
 
-                # self.logger.experiment.log_curve(
-                #     f"ROC{app}_{self.current_epoch}",
-                #     x=fprs ,
-                #     y=tprs ,
-                #     step=self.current_epoch,
-                #     overwrite=False,
-                # )
-                log[f"AUC{app}"] = auc(fprs, tprs)
-                cm.reset()
-                roc.reset()
+        metrics.reset()
+        cm.reset()
+        roc.reset()
+        self.log_dict(log, on_step=False, on_epoch=True)
 
     def log_image_check(self, preds, y, images, slide_idx):
         for pred, taget, image, slide_id in zip(preds, y, images, slide_idx):
             slide_id = int(slide_id.cpu().numpy())
             taget = taget.item()
-            pred = pred[0].item()
-            if taget == 1 and pred < 0.251:
+            pred_A = pred[0].item()
+            pred_B = pred[0].item()
+            pred_C = pred[0].item()
+            if taget == 1 and pred_A > 0.5:
                 if self.count_lumB_0[slide_id] < 10:
                     self.log_images(
                         image * 255,
                         slide_id,
-                        title=f"/BA luminal B classe comme A| prediction:{pred}",
+                        title=f"/BA luminal B classe comme A| prediction:{pred_B}",
                     )
                     self.count_lumB_0[slide_id] += 1
 
-            if taget == 1 and pred > 0.729:
+            if taget == 1 and pred_B > 0.5:
                 if self.count_lumB_1[slide_id] < 10:
                     self.log_images(
                         image * 255,
                         slide_id,
-                        title=f"/BB luminal B classe comme B| prediction:{pred}",
+                        title=f"/BB luminal B classe comme B| prediction:{pred_B}",
                     )
                     self.count_lumB_1[slide_id] += 1
-            if taget == 0 and pred < 0.251:
+            if taget == 0 and pred_A > 0.5:
                 if self.count_lumA_0[slide_id] < 10:
                     self.log_images(
                         image * 255,
                         slide_id,
-                        title=f"/AA luminal A classe comme A| prediction:{pred}",
+                        title=f"/AA luminal A classe comme A| prediction:{pred_A}",
                     )
                     self.count_lumA_0[slide_id] += 1
-            if taget == 0 and pred > 0.729:
+            if taget == 0 and pred_B > 0.5:
                 if self.count_lumA_1[slide_id] < 10:
                     self.log_images(
                         image * 255,
                         slide_id,
-                        title=f"/AB luminal A classe comme B| prediction:{pred}",
+                        title=f"/AB luminal A classe comme B| prediction:{pred_A}",
+                    )
+                    self.count_lumA_1[slide_id] += 1
+            if taget == 0 and pred_C > 0.5:
+                if self.count_lumA_1[slide_id] < 10:
+                    self.log_images(
+                        image * 255,
+                        slide_id,
+                        title=f"/luminal A classe comme autre| prediction:{pred_C}",
+                    )
+                    self.count_lumA_1[slide_id] += 1
+            if taget == 1 and pred_C > 0.5:
+                if self.count_lumA_1[slide_id] < 10:
+                    self.log_images(
+                        image * 255,
+                        slide_id,
+                        title=f"/luminal B classe comme autre| prediction:{pred_C}",
                     )
                     self.count_lumA_1[slide_id] += 1
 
