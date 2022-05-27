@@ -1,118 +1,128 @@
-"""This module aims to load models for inference and try it on test data."""
-# pylint: disable=import-error, no-name-in-module, unused-import
 import argparse
-import csv
-import pickle
+import json
 import torch
-import tqdm
+from tqdm import tqdm
 import yaml
+from pytorch_lightning.utilities.seed import seed_everything
+from src.preprocess import load_patches
 
-import numpy as np
-import pandas as pd
-
-import data.loader as loader
-from tools.utils import load_model, retrieve_id
-
-
-def inference_ml(cfg):
-    """Run the inference on the test set and writes the output on a csv file
-
-    Args:
-        cfg (dict): configuration
-    """
-
-    # Load test data
-    _, preprocessed_test_data = loader.main(cfg=cfg)
-
-    # Test
-    x_test = preprocessed_test_data["x_test"]
-
-    # Get sample IDs
-    idx = retrieve_id(cfg=cfg)
-
-    # Load model
-    model = pickle.load(open(cfg["TEST"]["PATH_TO_MODEL"], "rb"))
-
-    # Make predictions
-    y_pred_test = model.predict(x_test)
-    output = np.concatenate((idx.reshape(-1, 1), y_pred_test.reshape(-1, 1)), axis=1)
-
-    output_df = pd.DataFrame(output, columns=["_ID", "Y"])
-    output_df = output_df.astype({"_ID": "int32"})
-    output_df.to_csv("output.csv", index=False)
+from src.transforms import ToTensor
+from src import models
+from src.utils import progress_bar
 
 
-def inference_nn(cfg):
-    """Run the inference on the test set and writes the output on a csv file
+def infer(model, loader, device=None):
+    slide_info = {
+        "idx": [],
+        "y_hat": [],
+        "true": [],
+        "pos_x": [],
+        "pos_y": [],
+    }
+    with torch.no_grad():
+        # We enter evaluation mode. This is useless for the linear model
+        # but is important with layers such as dropout, batchnorm, ..
 
-    Args:
-        cfg (dict): configuration
-    """
+        for batch in tqdm(loader):
+            image = batch["image"]
+            slide_idx = batch["idx"]
+            p_x = batch["pos_x"]
+            p_y = batch["pos_y"]
+            y_slide = batch["target_slide"]
 
-    # Load test data
-    _, _, test_dataloader = loader.main(cfg=cfg)
+            inputs = image.float()
 
-    # Get sample IDs
-    idx = retrieve_id(cfg=cfg)
+            outputs = model(inputs)
+            preds = torch.softmax(outputs, 1)
+            print(slide_idx)
+            print(p_x)
 
-    # Define device for computational efficiency
-    if not torch.cuda.is_available():
-        device = torch.device("cpu")
-    else:
-        device = torch.device("cuda")
+            if len(slide_info["idx"]) == 0:
+                slide_info["idx"] = slide_idx
+                slide_info["y_hat"] = preds
+                slide_info["true"] = y_slide.int()
+                slide_info["pos_x"] = p_x
+                slide_info["pos_y"] = p_y
+            # after first checking it is possible concatenate the tensors
+            else:
+                slide_info["idx"] = torch.cat((slide_info["idx"], slide_idx), 0)
+                slide_info["y_hat"] = torch.cat((slide_info["y_hat"], preds), 0)
+                slide_info["true"] = torch.cat((slide_info["true"], y_slide.int()), 0)
+                slide_info["pos_x"] = torch.cat((slide_info["pos_x"], p_x), 0)
+                slide_info["pos_y"] = torch.cat((slide_info["pos_y"], p_y), 0)
 
-    # Load model for inference
-    input_size = test_dataloader.dataset[0][0].shape[0]
+        sample = {
+            "slide_idx": slide_info["idx"].cpu().numpy().tolist(),
+            "prediction_patch": slide_info["y_hat"].cpu().numpy().tolist(),
+            "pos_x": slide_info["pos_x"].cpu().numpy().tolist(),
+            "pos_y": slide_info["pos_y"].cpu().numpy().tolist(),
+        }
+        # the results are saved in a json
+        with open(f"./result.json", "w") as fp:
+            json.dump(sample, fp)
 
-    model = load_model(cfg, input_size)
-    model = model.to(device)
 
-    model.load_state_dict(torch.load(cfg["TEST"]["PATH_TO_MODEL"]))
-    model.eval()
+# Init the parser
+parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 
-    y_pred_test = None
+seed_everything(workers=True)
+# Add path to the config file to the command line arguments
+parser.add_argument(
+    "--path_to_config",
+    type=str,
+    required=True,
+    default="./config.yaml",
+    help="path to config file",
+)
+args = parser.parse_args()
 
-    for inputs, _ in tqdm.tqdm(test_dataloader):
-        inputs = inputs.to(device)
-        outputs = model(inputs)
 
-        # Concat the result in order to compute f1-score
-        if y_pred_test is None:
-            y_pred_test = outputs
-        else:
-            y_pred_test = torch.cat((y_pred_test, outputs))
+def main(cfg):
 
-    y_pred_test = y_pred_test.cpu().int().numpy()
-    output = np.concatenate((idx.reshape(-1, 1), y_pred_test.reshape(-1, 1)), axis=1)
+    print("main")
 
-    output_df = pd.DataFrame(output, columns=["_ID", "Y"])
-    output_df = output_df.astype({"_ID": "int32"})
-    output_df.to_csv("output.csv", index=False)
+    seed_everything(workers=True)
+
+    # check for transformation
+    transforms = [ToTensor()]
+
+    _, val_dl = load_patches(
+        slide_file=cfg["slide_file"],
+        noted=cfg["noted"],
+        level=cfg["level"],
+        transforms=transforms,
+        normalize=cfg["normalize"],
+        batch_size=cfg["batch_size"],
+        num_workers=cfg["num_workers"],
+        patch_size=cfg["patch_size"],
+        num_classes=cfg["num_classes"],
+    )
+    print("loaded")
+    name = cfg["checkpoint_name"]
+
+    lesnet = torch.load(name)
+    resnet = {k.replace("model.", ""): v for k, v in lesnet["state_dict"].items()}
+
+    # Init model
+    model = models.build_model(
+        cfg["model"],
+        cfg["num_classes"],
+        cfg["freeze"],
+        cfg["pretrained"],
+    )
+    model.load_state_dict(resnet, strict=True)
+
+    _ = model.eval()
+    # creating unique log folder
+
+    infer(model, val_dl)
 
 
 if __name__ == "__main__":
-    # Init the parser;
-    inference_parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawTextHelpFormatter
-    )
 
-    # Add path to the config file to the command line arguments;
-    inference_parser.add_argument(
-        "--path_to_config",
-        type=str,
-        required=True,
-        default="./config.yaml",
-        help="path to config file.",
-    )
-    args = inference_parser.parse_args()
-
-    # Load config file
     with open(args.path_to_config, "r") as ymlfile:
         config_file = yaml.load(ymlfile, Loader=yaml.Loader)
 
-    # Run inference
-    if config_file["MODELS"]["NN"]:
-        inference_nn(cfg=config_file)
+    print(config_file)
 
-    else:
-        inference_ml(cfg=config_file)
+    main(cfg=config_file)
