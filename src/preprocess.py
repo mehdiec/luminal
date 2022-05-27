@@ -1,11 +1,14 @@
-from albumentations import Normalize, Lambda, Resize
+import enum
+from albumentations import Normalize, Lambda, Resize, CenterCrop
 import torch
 
-from torch.utils.data import DataLoader
+from torch.utils.data import WeightedRandomSampler, DataLoader
 
 from src.transforms import ToTensor
 from src import data_loader
 from tqdm import tqdm
+
+from src.utils import progress_bar
 
 # def compute_mean_std(loader):
 #     # Compute the mean over minibatches
@@ -87,6 +90,8 @@ def load_patches(
     patch_size=1024,
     transforms=[],
     normalize=False,
+    num_classes=3,
+    balance=False,
 ):
     if patch_size == 2048:
         transforms_val = [
@@ -99,7 +104,11 @@ def load_patches(
             ToTensor(),
         ]
     else:
-        transforms_val = [ToTensor()]
+        transforms_val = [
+            # Resize(256, 256),
+            # CenterCrop(224, 224),
+            ToTensor()
+        ]
 
     # train_ds = data_loader.ClassificationDataset(slide_file, noted=noted, level=level)
     if normalize:
@@ -126,6 +135,7 @@ def load_patches(
         noted=noted,
         level=level,
         patch_size=patch_size,
+        num_classes=num_classes,
     )
     val_ds = data_loader.ClassificationDataset(
         slide_file,
@@ -134,14 +144,41 @@ def load_patches(
         noted=noted,
         level=level,
         patch_size=patch_size,
+        num_classes=num_classes,
     )
+    if balance:
+        class_weights = [
+            len(train_ds) / train_ds.labels.count(0) * 1.5,
+            len(train_ds) / train_ds.labels.count(1),
+            len(train_ds) / train_ds.labels.count(2),
+        ]
 
-    train_dl = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        shuffle=True,
-    )
+        sample_weights = [0] * len(train_ds)
+
+        for idx, data in enumerate(train_ds):
+            class_weight = class_weights[data["target"]]
+            sample_weights[idx] = class_weight
+            progress_bar(
+                idx,
+                len(train_ds),
+                msg=f"luminal A: {train_ds.labels.count(0)},luminal B: {train_ds.labels.count(1)},trash: {train_ds.labels.count(2)}",
+            )
+
+        sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights))
+
+        train_dl = DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            sampler=sampler,
+        )
+    else:
+        train_dl = DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            shuffle=True,
+        )
 
     val_dl = DataLoader(
         val_ds,

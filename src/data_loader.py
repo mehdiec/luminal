@@ -89,6 +89,7 @@ class ClassificationDataset(Dataset):
                         / str(patch_size)
                         / csv_file.with_suffix(".csv")
                     )
+
                     # patches_path = (
                     #     outfolder / "patch_csvs" / csv_file.with_suffix(".csv")
                     # )
@@ -97,36 +98,21 @@ class ClassificationDataset(Dataset):
                         reader = csv.DictReader(patch_file)
                         for i, patch in enumerate(reader):
                             if num_classes == 3:
-                                if int(patch.get("label")) == 2 and (
-                                    cnt_2 < 10000000000 or cnt_2 < cnt * 10000000
-                                ):
-                                    self.patches.append(Patch.from_csv_row(patch))
-                                    self.slide_idxs.append(slide_idx)
-                                    self.labels.append(int(patch.get("label")))
-                                    self.labels_slide.append(MAPPING[row["ab"]])
 
-                                    cnt_2 += 1
-                                elif int(patch.get("label")) != 2:
-                                    self.patches.append(Patch.from_csv_row(patch))
-                                    self.slide_idxs.append(slide_idx)
-                                    self.labels.append(int(patch.get("label")))
-                                    self.labels_slide.append(MAPPING[row["ab"]])
-
-                                    cnt += 1
-                                else:
-                                    continue
+                                self.patches.append(Patch.from_csv_row(patch))
+                                self.slide_idxs.append(slide_idx)
+                                self.labels.append(int(patch.get("label")))
+                                self.labels_slide.append(MAPPING[row["ab"]])
                             else:
                                 if int(patch.get("label")) != 2:
                                     self.patches.append(Patch.from_csv_row(patch))
                                     self.slide_idxs.append(slide_idx)
                                     self.labels.append(int(patch.get("label")))
                                     self.labels_slide.append(MAPPING[row["ab"]])
-                            # if i == 63:
-                            #     break
                     slide_idx += 1
 
                     # # delete
-                    # if slide_idx == 2:
+                    # if slide_idx == 3:
                     #     break
 
         self.transforms = Compose(ifnone(transforms, []))
@@ -295,6 +281,98 @@ class SingleSlideClassificationDataset(Dataset):
             "target": target,
             "pos_x": patch.position.x,
             "pos_y": patch.position.y,
+            "target_slide": target_slide,
+        }
+
+        return image_with_slide_idx  # .transpose(2, 0, 1)
+
+
+class FullSlideClassificationDataset(Dataset):
+    def __init__(
+        self,
+        slide_file: str,
+        outfolder: Path = Path("/data/DeepLearning/mehdi"),
+        transforms: Optional[Sequence[BasicTransform]] = None,
+        slide_backend: str = "cucim",
+        split: str = "train",
+        noted: bool = False,
+        level: int = 0,
+        patch_size: int = 1024,
+        num_classes: int = 2,
+    ):
+        """_summary_
+
+        Args:
+            slide_file (str): file name with its full path containing the data split
+            outfolder (Path, optional): folder containing all the data used in the loader. Defaults to Path("/data/DeepLearning/mehdi").
+            transforms (Optional[Sequence[BasicTransform]], optional): image transformation used for data augmentation. Defaults to None.
+            slide_backend (str, optional): how we chose to open our slides with. Defaults to "cucim".
+            split (str, optional): the split to load. Defaults to "train".
+            noted (bool, optional): chose whether to load the slide noted or not. Defaults to False.
+        """
+
+        super().__init__()
+        # info retrieved from the csv
+        self.slides = []
+        self.masks = []
+        self.patches = []
+        self.labels = []
+        self.split = []
+        # info added to identify each patch to e=its coresponding slide
+        self.slide_idxs = []
+        self.labels_slide = []
+
+        slide_idx = 0
+        self.noted = noted
+        self.transforms = Compose(ifnone(transforms, []))
+
+        with open(slide_file, "r") as out_file:
+            reader = csv.DictReader(out_file)
+
+            for (i, row) in enumerate(
+                reader
+            ):  # we read each row of our csv to get the right slide for the right split
+                # print(outfolder)
+                if row["split"] == split:
+                    slide_path = row["id"]
+                    self.slides.append(Slide(slide_path, backend=slide_backend))
+                    self.patches.append(1)
+                    self.labels.append(MAPPING[row["ab"]])
+                    self.split.append(1)
+                    # info added to identify each patch to e=its coresponding slide
+                    self.slide_idxs.append(i)
+                    self.labels_slide.append(1)
+
+        # self.clean()
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]:
+        patch = self.patches[idx]
+        slide_idx = self.slide_idxs[idx]
+        slide = self.slides[idx]
+        target = self.labels[idx]
+        target_slide = self.labels_slide[idx]
+
+        slide_region = slide.get_thumbnail((1024, 1024))
+        slide_region = np.array(slide_region.resize((1024, 1024)))
+
+        # image = to_pil_image(slide_region)
+        # image.save("oof.png")
+        # sys.exit(1)
+
+        if self.transforms:
+            transformed = self.transforms(image=slide_region)
+
+        image_with_slide_idx = {
+            "image": transformed["image"],
+            "idx": slide_idx,
+            "target": target,
+            "pos_x": 0,
+            "pos_y": 0,
             "target_slide": target_slide,
         }
 
