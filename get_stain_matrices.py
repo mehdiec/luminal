@@ -17,7 +17,7 @@ parser.add_argument(
     "--patch-csv-folder",
     type=Path,
     help="Input folder containing PathAIA patch csvs.",
-    default="/data/DeepLearning/mehdi/csv_annot/patch_csvs/0/",
+    default="/data/DeepLearning/mehdi/csv_annot/patch_csvs/1/512",
     # required=True,
 )
 parser.add_argument(
