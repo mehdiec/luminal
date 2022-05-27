@@ -32,13 +32,13 @@ parser.add_argument(
 parser.add_argument(
     "--patch_size",
     type=int,
-    default=2048,
+    default=512,
     help="size of the patches",
 )
 parser.add_argument(
     "--level",
     type=int,
-    default=0,
+    default=1,
     help=" ",
 )
 parser.add_argument(
@@ -71,6 +71,13 @@ parser.add_argument(
     type=Path,
     default="/data/DeepLearning/mehdi/csv/luminal_data_split.csv",
     help="name of the csv that store the split ",
+)
+
+parser.add_argument(
+    "--area_intercect_percentage",
+    type=int,
+    default=0.0631,
+    help="how much overlay you want to allow between the anotation and the patch ",
 )
 
 
@@ -176,7 +183,10 @@ if __name__ == "__main__":
 
                     if roi_shape.intersects(patch_shape):
                         intersect = roi_shape.intersection(patch_shape)
-                        if intersect.area / patch_shape.area > 0.3:
+                        if (
+                            intersect.area / patch_shape.area
+                            > args.area_intercect_percentage
+                        ):
                             row = patch.to_csv_row()
                             row[
                                 "label"
