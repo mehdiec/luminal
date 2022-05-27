@@ -175,14 +175,14 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True):
     elif model_name == "vit":
         model = ViTBase16(num_classes=1)
     elif model_name == "mobilenet":
-        # resnet = timm.create_model("mobilenetv2_140", pretrained=pretrained)
-        # if freeze:
-        #     for param in resnet.parameters():
-        #         param.requires_grad = False
+        resnet = timm.create_model("mobilenetv2_140", pretrained=pretrained)
+        if freeze:
+            for param in resnet.parameters():
+                param.requires_grad = False
 
-        # infeat = resnet.classifier.in_features
-        # resnet.classifier = nn.Linear(infeat, num_classes)
-        resnet = ResNet(1, pretrained)
+        infeat = resnet.classifier.in_features
+        resnet.classifier = nn.Linear(infeat, num_classes)
+        # resnet = ResNet(1, pretrained)
         model = resnet
         # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
