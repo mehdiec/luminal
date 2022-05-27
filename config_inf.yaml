@@ -1,0 +1,26 @@
+slide_file: /data/DeepLearning/mehdi/csv/luminal_data_split.csv
+patch_size: 1024 #768
+level: 0
+noted : False
+
+transform: True 
+num_classes : 3
+normalize: False
+horovod: False
+
+gpu: 0
+num_workers: 8
+
+logfolder: /data/DeepLearning/mehdi/log
+model: resnet #vit #[vanilla,"resnet",mobilenet]
+checkpoint_name : /data/DeepLearning/mehdi/log/luminal/resnet_281/luminal/e2aa58a3875e48528170f477276f6e35/checkpoints/epoch=22-val_loss_ce=0.000.ckpt
+freeze : False
+pretrained : True
+loss: ce
+epochs: 50
+batch_size: 4
+lr: 0.00004
+wd: 0.001
+scheduler: cosine-anneal #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
+group_norm: False
+grad_accumulation: 1
