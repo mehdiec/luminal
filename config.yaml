@@ -4,21 +4,24 @@ level: 1
 noted : True
 balance : True
 
+
 transform: True 
 num_classes : 3
 normalize: False
 horovod: False
-
+center_crop : 0
 gpu: 1
 num_workers: 8
 
+
+dropout : 0.5
 logfolder: /data/DeepLearning/mehdi/log
-model: resnet #vit #[vanilla,"resnet",mobilenet]
+model: vanilla #vit #[vanilla,"resnet",mobilenet]
 freeze : False
 pretrained : True
 loss: ce
 epochs: 30
-batch_size: 32
+batch_size: 64
 lr: 0.001
 wd: 0.01
 scheduler: one-cycle #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
