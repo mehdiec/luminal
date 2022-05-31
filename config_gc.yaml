@@ -1,0 +1,5 @@
+x : 94208     
+y: 12288
+slide : 21I000011-1-04-1_140311.svs
+model : /data/DeepLearning/mehdi/log/luminal/resnet_319/luminal/15a61c98fef74769ac047e1ba1654c66/checkpoints/epoch=20-val_loss_ce=0.000.ckpt
+num_classes : 3
