@@ -1,6 +1,8 @@
 /.vscode
+/results
 */__pycache__
 */*/__pycache__
 *.ipynb
 *.log
 *.jpg
+__pycache__
