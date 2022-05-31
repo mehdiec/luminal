@@ -1,23 +1,22 @@
-from albumentations.core.transforms_interface import DualTransform, ImageOnlyTransform
 import numpy as np
-from pathaia.util.basic import ifnone
-from typing import Callable, Optional, Any, List, Sequence, Tuple, Dict
+import spams
+import torch
+
+from albumentations.core.transforms_interface import DualTransform, ImageOnlyTransform
 from nptyping import NDArray
 from numbers import Number
-from staintools.stain_extraction.vahadane_stain_extractor import VahadaneStainExtractor
-from torchvision.transforms.functional import to_tensor
-import torch
+from pathaia.util.basic import ifnone
 from pathaia.util.types import NDImage, NDGrayImage, NDByteImage
 from staintools.miscellaneous.optical_density_conversion import convert_RGB_to_OD
-import spams
-
-
 from staintools.miscellaneous.miscellaneous_functions import normalize_matrix_rows
 from staintools.miscellaneous.optical_density_conversion import convert_RGB_to_OD
+from staintools.stain_extraction.vahadane_stain_extractor import VahadaneStainExtractor
 from staintools.tissue_masks.luminosity_threshold_tissue_locator import (
     LuminosityThresholdTissueLocator,
 )
 from staintools.preprocessing.input_validation import is_uint8_image
+from torchvision.transforms.functional import to_tensor
+from typing import Callable, Optional, Any, List, Sequence, Tuple, Dict
 
 
 def get_stain_matrix(I, luminosity_threshold=0.9, regularizer=0.1):

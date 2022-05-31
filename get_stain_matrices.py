@@ -1,11 +1,11 @@
+import numpy as np
+
 from argparse import ArgumentParser
+from csv import DictReader
 from pathlib import Path
 from pathaia.util.types import Patch, Slide
 from pathaia.util.paths import get_files
-from csv import DictReader
-import numpy as np
 from staintools.stain_extraction.vahadane_stain_extractor import VahadaneStainExtractor
-from tqdm import tqdm
 
 parser = ArgumentParser(
     prog=(

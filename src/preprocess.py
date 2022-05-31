@@ -1,14 +1,14 @@
-import enum
-from albumentations import Normalize, Lambda, Resize, CenterCrop
 import torch
 
+from albumentations import Normalize, Lambda, Resize, CenterCrop
 from torch.utils.data import WeightedRandomSampler, DataLoader
-
-from src.transforms import ToTensor
-from src import data_loader
 from tqdm import tqdm
 
+
+from src import data_loader
+from src.transforms import ToTensor
 from src.utils import progress_bar
+
 
 # def compute_mean_std(loader):
 #     # Compute the mean over minibatches
@@ -107,7 +107,8 @@ def load_patches(
         transforms_val = [
             # Resize(256, 256),
             # CenterCrop(224, 224),
-            ToTensor()
+            # CenterCrop(256, 256),
+            ToTensor(),
         ]
 
     # train_ds = data_loader.ClassificationDataset(slide_file, noted=noted, level=level)
@@ -147,11 +148,12 @@ def load_patches(
         num_classes=num_classes,
     )
     if balance:
-        class_weights = [
-            len(train_ds) / train_ds.labels.count(0) * 1.5,
-            len(train_ds) / train_ds.labels.count(1),
-            len(train_ds) / train_ds.labels.count(2),
-        ]
+        # class_weights = [
+        #     len(train_ds) / train_ds.labels.count(0),
+        #     len(train_ds) / train_ds.labels.count(1),
+        #     len(train_ds) / train_ds.labels.count(2),
+        # ]
+        class_weights = [10, 10, 1]
 
         sample_weights = [0] * len(train_ds)
 

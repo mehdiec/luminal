@@ -1,7 +1,7 @@
-from torch import nn
 import torch
 import timm
-from vit_pytorch import ViT
+
+from torch import nn
 
 # from coatnet import CoAtNet
 
@@ -107,9 +107,10 @@ class ResNet(nn.Module):
         self.global_pool = self.resnet.global_pool
 
         # classifier
-        self.fc = nn.Sequential(
-            nn.Dropout2d(0.5), nn.Linear(infeat, num_classes)
-        )  # nn.Linear(infeat, num_classes)#=nn.Linear(infeat, num_classes)# nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))# nn.Linear(infeat, num_classes)
+        self.fc = nn.Linear(infeat, num_classes)
+        # nn.Sequential(
+        #     nn.Dropout2d(0.5), nn.Linear(infeat, num_classes)
+        # )  # nn.Linear(infeat, num_classes)#=nn.Linear(infeat, num_classes)# nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))# nn.Linear(infeat, num_classes)
 
         # gradient placeholder
         self.gradient = None
@@ -151,7 +152,7 @@ class ResNet(nn.Module):
         return x
 
 
-def build_model(model_name, num_classes, freeze=False, pretrained=True):
+def build_model(model_name, num_classes, freeze=False, pretrained=True, dropout=0):
     model = None
 
     if model_name == "vanilla":
@@ -160,9 +161,12 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True):
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
         infeat = resnet.fc.in_features
-        resnet.fc = nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))
-
-        # resnet.fc = nn.Linear(infeat, num_classes)  # make the change
+        if dropout > 0:
+            resnet.fc = nn.Sequential(
+                nn.Dropout2d(dropout), nn.Linear(infeat, num_classes)
+            )
+        else:
+            resnet.fc = nn.Linear(infeat, num_classes)  # make the change
 
         # isolate the feature blocks
 

@@ -2,6 +2,7 @@ import argparse
 import os
 import yaml
 import pytorch_lightning as pl
+
 from albumentations import (
     Normalize,
     RandomRotate90,
@@ -19,19 +20,18 @@ from albumentations import (
     RGBShift,
 )
 from math import ceil
-
 from pathlib import Path
 from pytorch_lightning.loggers import CometLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
 from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
-from src.preprocess import load_patches
 
+from src.preprocess import load_patches
 from src.transforms import StainAugmentor, ToTensor
 from src import models, pl_modules_temp, losses, utils
 
-shuft = 30 / 255
+shuft = 60 / 255
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -115,29 +115,30 @@ def main(cfg):
             ]
         else:
             transforms = [
-                # Cutout(
-                #     always_apply=False,
-                #     p=0.5,
-                #     num_holes=40,
-                #     max_h_size=60,
-                #     max_w_size=60,
-                #     fill_value=(1, 1, 1),
-                # ),
                 # Resize(256, 256),
-                # CenterCrop(224, 224),
+                # CenterCrop(256, 256),
                 Flip(),
                 Transpose(),
                 RandomRotate90(p=0.5),
                 # StainAugmentor(),
-                # RandomBrightnessContrast(
-                #     brightness_limit=0.2,
-                #     contrast_limit=(-0.3, 0.05),
-                #     brightness_by_max=True,
-                #     always_apply=False,
-                #     p=0.5,
-                # ),
-                Blur(always_apply=False, p=0.7, blur_limit=(3, 4)),
-                # ChannelShuffle(always_apply=False, p=0.5),
+                Rotate(
+                    always_apply=False,
+                    p=0.8,
+                    limit=(-90, 314),
+                    interpolation=2,
+                    border_mode=0,
+                    value=(1, 1, 1),
+                    mask_value=None,
+                ),
+                Cutout(
+                    always_apply=False,
+                    p=0.5,
+                    num_holes=40,
+                    max_w_size=60,
+                    max_h_size=60,
+                    fill_value=(1, 1, 1),
+                ),
+                ChannelShuffle(always_apply=False, p=0.5),
                 RGBShift(
                     always_apply=False,
                     p=0.5,
@@ -145,16 +146,14 @@ def main(cfg):
                     g_shift_limit=(-shuft, shuft),
                     b_shift_limit=(-shuft, shuft),
                 ),
-                # # Rotate(always_apply=False, p=.5, limit=(-10, 10), interpolation=4, border_mode=2, value=(0, 0, 0), mask_value=None),
-                # Rotate(
-                #     always_apply=False,
-                #     p=0.8,
-                #     limit=(-90, 314),
-                #     interpolation=2,
-                #     border_mode=0,
-                #     value=(1, 1, 1),
-                #     mask_value=None,
-                # ),
+                RandomBrightnessContrast(
+                    brightness_limit=0.2,
+                    contrast_limit=(-0.3, 0.05),
+                    brightness_by_max=True,
+                    always_apply=False,
+                    p=0.5,
+                ),
+                Blur(always_apply=False, p=0.5, blur_limit=(3, 4)),
                 # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensor(),
             ]
@@ -187,6 +186,7 @@ def main(cfg):
         cfg["num_classes"],
         cfg["freeze"],
         cfg["pretrained"],
+        cfg["dropout"],
     )
 
     # creating unique log folder
@@ -222,6 +222,7 @@ def main(cfg):
         logdir=logdir,
         num_classes=cfg["num_classes"],
         device=cfg["gpu"],
+        train_dl=train_dl,
     )
     cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
