@@ -1,27 +1,26 @@
-import sys
-from numpy import squeeze
+import json
+import cv2
+import numpy as np
 import pytorch_lightning as pl
-from typing import Optional, Dict, Callable, Sequence, Tuple, Union
+import torch
+
+from pathaia.util.basic import ifnone
 from torch import Tensor, nn
 from torch.optim import Optimizer, AdamW
-import torch
 from torch.optim.lr_scheduler import (
     OneCycleLR,
     CosineAnnealingLR,
     ReduceLROnPlateau,
     _LRScheduler,
 )
-from PIL import Image
 from torchmetrics import ROC, ConfusionMatrix
 from torchmetrics.functional import auc
 from torchvision.transforms.functional import to_pil_image
 from torchmetrics import Metric, MetricCollection
-from pathaia.util.basic import ifnone
+from typing import Optional, Dict, Callable, Sequence, Tuple, Union
+
 
 from src.losses import get_loss_name
-import json
-import cv2
-import numpy as np
 
 
 def get_scheduler_func(
@@ -80,6 +79,7 @@ class BasicClassificationModule(pl.LightningModule):
         logdir=None,
         num_classes=2,
         device=1,
+        train_dl=None,
     ):
         """_summary_
 
@@ -117,10 +117,19 @@ class BasicClassificationModule(pl.LightningModule):
         self.count_lumA_1 = {i: 0 for i in range(10)}
         self.count_lumB_0 = {i: 0 for i in range(10)}
         self.count_lumB_1 = {i: 0 for i in range(10)}
+        self.train_dl = train_dl
 
     def forward(self, x: Tensor) -> Tensor:
 
         return self.model(x.squeeze(1).float())  # .squeeze(1)
+
+    def on_fit_start(self):
+
+        x = next(iter(self.train_dl))
+        for img in x["image"]:
+            self.logger.experiment.log_image(
+                img, image_channels="first", image_minmax=(0.0, 1.0)
+            )
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
 
@@ -152,7 +161,7 @@ class BasicClassificationModule(pl.LightningModule):
             count += self.count_lumA_1[i]
             count += self.count_lumB_1[i]
             count += self.count_lumA_0[i]
-        if count < 400:
+        if count < 0:
             self.log_image_check(preds, y, images, slide_idx)
 
         # if batch_idx % 100 == 0 and self.trainer.training_type_plugin.global_rank == 0:
