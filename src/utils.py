@@ -1,11 +1,10 @@
+import numpy as np
 import os
 import sys
 import time
-import csv
-import numpy as np
 import torch
+
 from torch.nn.modules.module import _addindent
-from sklearn.metrics import f1_score, precision_score, recall_score
 
 
 def train(model, loader, f_loss, optimizer, device):

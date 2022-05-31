@@ -1,12 +1,12 @@
-import csv
 import argparse
+import csv
 
 from glob import glob
+from pathaia.util.types import Patch, Slide
+from pathaia.patches import filter_thumbnail
+from pathaia.patches.functional_api import slide_rois_no_image
 from pathlib import Path
 
-from pathaia.util.types import Patch, Slide
-from pathaia.patches.functional_api import slide_rois_no_image
-from pathaia.patches import filter_thumbnail
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)

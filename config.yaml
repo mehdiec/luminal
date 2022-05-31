@@ -1,25 +1,29 @@
 slide_file: /data/DeepLearning/mehdi/csv/luminal_data_split.csv
-patch_size: 512
+patch_size: 512 #768
 level: 1
 noted : True
+balance : True
+
 
 transform: True 
 num_classes : 3
 normalize: False
 horovod: False
-
-gpu: 0
+center_crop : 0
+gpu: 1
 num_workers: 8
 
+
+dropout : 0.5
 logfolder: /data/DeepLearning/mehdi/log
-model: resnet #vit #[vanilla,"resnet",mobilenet]
+model: vanilla #vit #[vanilla,"resnet",mobilenet]
 freeze : False
 pretrained : True
 loss: ce
-epochs: 40
-batch_size: 32
-lr: 0.0004
-wd: 0.0001
-scheduler: reduce-on-plateau #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
+epochs: 30
+batch_size: 64
+lr: 0.001
+wd: 0.01
+scheduler: one-cycle #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
 group_norm: False
 grad_accumulation: 1

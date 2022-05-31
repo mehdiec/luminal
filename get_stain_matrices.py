@@ -1,11 +1,11 @@
+import numpy as np
+
 from argparse import ArgumentParser
+from csv import DictReader
 from pathlib import Path
 from pathaia.util.types import Patch, Slide
 from pathaia.util.paths import get_files
-from csv import DictReader
-import numpy as np
 from staintools.stain_extraction.vahadane_stain_extractor import VahadaneStainExtractor
-from tqdm import tqdm
 
 parser = ArgumentParser(
     prog=(
@@ -17,7 +17,7 @@ parser.add_argument(
     "--patch-csv-folder",
     type=Path,
     help="Input folder containing PathAIA patch csvs.",
-    default="/data/DeepLearning/mehdi/csv_annot/patch_csvs/0/",
+    default="/data/DeepLearning/mehdi/csv_annot/patch_csvs/1/512",
     # required=True,
 )
 parser.add_argument(

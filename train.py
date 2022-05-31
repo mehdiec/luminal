@@ -2,6 +2,7 @@ import argparse
 import os
 import yaml
 import pytorch_lightning as pl
+
 from albumentations import (
     Normalize,
     RandomRotate90,
@@ -19,19 +20,18 @@ from albumentations import (
     RGBShift,
 )
 from math import ceil
-
 from pathlib import Path
 from pytorch_lightning.loggers import CometLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
 from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
-from src.preprocess import load_patches
 
+from src.preprocess import load_patches
 from src.transforms import StainAugmentor, ToTensor
 from src import models, pl_modules_temp, losses, utils
 
-shuft = 30 / 255
+shuft = 60 / 255
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -48,16 +48,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-def _collate_fn(batch):
-    xs = []
-    ys = []
-    for x, y in batch:
-        xs.append(x)
-        ys.append(y)
-    return xs, ys
-
-
-def main(cfg, path_to_cfg=""):
+def main(cfg):
     # if args.horovod:
     #     hvd.init()
     print("main")
@@ -78,7 +69,8 @@ def main(cfg, path_to_cfg=""):
         if cfg["patch_size"] == 2048:
             transforms = [
                 Resize(1024, 1024),
-                # Resize(384, 384),
+                # Resize(256, 256),
+                # CenterCrop(224,224)
                 Flip(),
                 Transpose(),
                 RandomRotate90(),
@@ -123,17 +115,30 @@ def main(cfg, path_to_cfg=""):
             ]
         else:
             transforms = [
+                # Resize(256, 256),
+                # CenterCrop(256, 256),
                 Flip(),
                 Transpose(),
-                RandomRotate90(),
-                ChannelShuffle(always_apply=False, p=0.5),
-                RandomBrightnessContrast(
-                    brightness_limit=0.2,
-                    contrast_limit=(-0.3, 0.05),
-                    brightness_by_max=True,
+                RandomRotate90(p=0.5),
+                # StainAugmentor(),
+                Rotate(
                     always_apply=False,
                     p=0.8,
+                    limit=(-90, 314),
+                    interpolation=2,
+                    border_mode=0,
+                    value=(1, 1, 1),
+                    mask_value=None,
                 ),
+                Cutout(
+                    always_apply=False,
+                    p=0.5,
+                    num_holes=40,
+                    max_w_size=60,
+                    max_h_size=60,
+                    fill_value=(1, 1, 1),
+                ),
+                ChannelShuffle(always_apply=False, p=0.5),
                 RGBShift(
                     always_apply=False,
                     p=0.5,
@@ -141,7 +146,15 @@ def main(cfg, path_to_cfg=""):
                     g_shift_limit=(-shuft, shuft),
                     b_shift_limit=(-shuft, shuft),
                 ),
+                RandomBrightnessContrast(
+                    brightness_limit=0.2,
+                    contrast_limit=(-0.3, 0.05),
+                    brightness_by_max=True,
+                    always_apply=False,
+                    p=0.5,
+                ),
                 Blur(always_apply=False, p=0.5, blur_limit=(3, 4)),
+                # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensor(),
             ]
 
@@ -154,6 +167,8 @@ def main(cfg, path_to_cfg=""):
         batch_size=cfg["batch_size"],
         num_workers=cfg["num_workers"],
         patch_size=cfg["patch_size"],
+        num_classes=cfg["num_classes"],
+        balance=cfg["balance"],
     )
     print("loaded")
 
@@ -171,6 +186,7 @@ def main(cfg, path_to_cfg=""):
         cfg["num_classes"],
         cfg["freeze"],
         cfg["pretrained"],
+        cfg["dropout"],
     )
 
     # creating unique log folder
@@ -206,6 +222,7 @@ def main(cfg, path_to_cfg=""):
         logdir=logdir,
         num_classes=cfg["num_classes"],
         device=cfg["gpu"],
+        train_dl=train_dl,
     )
     cfg["logdir"] = logdir
     logger.log_hyperparams(cfg)
@@ -222,9 +239,10 @@ def main(cfg, path_to_cfg=""):
         mode="max",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
     )
+
     # earlystopping
     early_stop_callback = EarlyStopping(
-        monitor="val_loss", min_delta=0.00, patience=20, verbose=False, mode="min"
+        monitor="val_loss", min_delta=0.00, patience=10, verbose=False, mode="min"
     )
 
     trainer = pl.Trainer(
@@ -236,7 +254,6 @@ def main(cfg, path_to_cfg=""):
         accumulate_grad_batches=cfg["grad_accumulation"],
         auto_select_gpus=True,
         callbacks=[ckpt_callback, early_stop_callback],
-        # strategy="horovod" if args.horovod else None,
     )
 
     # if cfg["resume_version"]  is not None:

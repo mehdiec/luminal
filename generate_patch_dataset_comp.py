@@ -1,16 +1,16 @@
-import csv
 import argparse
+import csv
+import json
 
 from glob import glob
+from pathaia.util.types import Patch, Slide
+from pathaia.patches.functional_api import slide_rois_no_image
+from pathaia.patches import filter_thumbnail
 from pathlib import Path
 from shapely.geometry import shape
 from shapely import geometry
 from shapely.geometry.polygon import Polygon
-import json
 
-from pathaia.util.types import Patch, Slide
-from pathaia.patches.functional_api import slide_rois_no_image
-from pathaia.patches import filter_thumbnail
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)

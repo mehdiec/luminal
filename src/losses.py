@@ -1,6 +1,6 @@
-from typing import Tuple, Sequence
-import torch
 import torch.nn as nn
+
+from typing import Tuple, Sequence
 
 
 def get_loss(name: str) -> nn.Module:
@@ -19,7 +19,7 @@ def get_loss(name: str) -> nn.Module:
     if split_name[0] == "bce":
         return nn.BCEWithLogitsLoss()
     if split_name[0] == "ce":
-        return nn.CrossEntropyLoss()
+        return nn.CrossEntropyLoss()  # weight=torch.tensor([3.0, 2.0, 1.0])
     elif split_name[0] == "sum":
         names = split_name[1::2]
         coefs = map(float, split_name[2::2])
