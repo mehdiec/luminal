@@ -16,13 +16,13 @@ num_workers: 8
 
 dropout : 0.5
 logfolder: /data/DeepLearning/mehdi/log
-model: vanilla #vit #[vanilla,"resnet",mobilenet]
+model: efficientnet #resnet50_ #vanilla #vit #[vanilla,"resnet",mobilenet]
 freeze : False
 pretrained : True
 loss: ce
-epochs: 30
-batch_size: 64
-lr: 0.001
+epochs: 50
+batch_size: 16
+lr: 0.0005
 wd: 0.01
 scheduler: one-cycle #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
 group_norm: False

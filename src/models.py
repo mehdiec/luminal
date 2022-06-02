@@ -38,7 +38,7 @@ def conv_relu_maxp(in_channels, out_channels, ks):
 
 
 class VanillaCNN(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, shape):
         super(VanillaCNN, self).__init__()
 
         # By default, Linear layers and Conv layers use Kaiming He initialization
@@ -48,7 +48,7 @@ class VanillaCNN(nn.Module):
             *conv_relu_maxp(16, 32, 5),
             *conv_relu_maxp(32, 64, 5),
         )
-        probe_tensor = torch.zeros((1, 3, 1024, 1024))
+        probe_tensor = torch.zeros((1, 3, shape, shape))
         out_features = self.features(probe_tensor).view(-1)
 
         self.classifier = nn.Sequential(
@@ -152,11 +152,13 @@ class ResNet(nn.Module):
         return x
 
 
-def build_model(model_name, num_classes, freeze=False, pretrained=True, dropout=0):
+def build_model(
+    model_name, num_classes, freeze=False, pretrained=True, dropout=0, shape=512
+):
     model = None
 
     if model_name == "vanilla":
-        model = VanillaCNN(num_classes)
+        model = VanillaCNN(num_classes, shape)
 
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
@@ -176,8 +178,42 @@ def build_model(model_name, num_classes, freeze=False, pretrained=True, dropout=
 
         # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         model = resnet
+    elif model_name == "resnet50_":
+        resnet = timm.create_model("resnet50", pretrained=pretrained)
+        infeat = resnet.fc.in_features
+        if dropout > 0:
+            resnet.fc = nn.Sequential(
+                nn.Dropout2d(dropout), nn.Linear(infeat, num_classes)
+            )
+        else:
+            resnet.fc = nn.Linear(infeat, num_classes)  # make the change
+
+        # isolate the feature blocks
+
+        if freeze:
+            for param in resnet.parameters():
+                param.requires_grad = False
+
+        # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        model = resnet
     elif model_name == "vit":
         model = ViTBase16(num_classes=1)
+    elif model_name == "efficientnet":
+        model = timm.create_model("efficientnet_b5", pretrained=True)
+        infeat = model.classifier.in_features
+        if dropout > 0:
+            model.classifier = nn.Sequential(
+                nn.Dropout2d(dropout), nn.Linear(infeat, num_classes)
+            )
+        else:
+            model.classifier = nn.Linear(infeat, num_classes)  # make the change
+
+        # isolate the feature blocks
+
+        if freeze:
+            for param in model.parameters():
+                param.requires_grad = False
+
     elif model_name == "mobilenet":
         resnet = timm.create_model("mobilenetv2_140", pretrained=pretrained)
         if freeze:
