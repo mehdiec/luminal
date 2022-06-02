@@ -213,7 +213,7 @@ def hist(result):
     return temp_result
 
 
-def heatmap(result, slide_name, resize_ratio=8):
+def heatmap(result, slide_name, resize_ratio=16):
 
     temp_result = {}
 

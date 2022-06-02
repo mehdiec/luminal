@@ -352,6 +352,10 @@
                     </div>
                 </div>
                 <div style=" width: 50%;" id="gradcam_galery">
+                    <!-- maybe here -->
+                    <!-- <div style="grid-column: 3 / 4; grid-row: 1/3;">
+
+                    </div> -->
 
                 </div>
 
@@ -384,7 +388,6 @@
     }
     function imageOnClick(elementRef) {
         var posObject = getEventLocation(event);
-        console.log(posObject)
     }
     function getEventLocation(eventRef) {
         var bcr = event.target.getBoundingClientRect()
@@ -395,12 +398,20 @@
         parent.innerHTML = ""
         const image = document.createElement("img")
         image.src = "data:image/png;base64," + element.image
+        // mettre autre id
+        // document.getElementById("pred_galery").appendChild(getWidgetPrediction(element["prediction"]))
         const btn_gradcam = document.createElement("a")
         btn_gradcam.textContent = "GradCam"
+        btn_gradcam.classList.add("btn")
+
+        // <a class="btn" onclick="run()">Run</a>
+        const prediction = element["prediction"]
+        parent.appendChild(getWidgetPrediction(prediction))
         parent.appendChild(image)
         parent.appendChild(btn_gradcam)
         btn_gradcam.addEventListener("click", (evt) => get_gradcam(element.pos_x, element.pos_y, (data) => {
             parent.innerHTML = ""
+            parent.appendChild(getWidgetPrediction(prediction))
             parent.appendChild(WidgetHeatmap("gradcamWidget", element.image, data))
 
         }))
@@ -502,7 +513,6 @@
         });
         container.appendChild(containerHeatmapSelector)
         if (clickEvt) {
-            console.log("sssssssssssssssssssssssssssssssssssss")
             imgHeatmap.addEventListener("click", (evt) => {
                 const coord = getEventLocation(evt)
                 clickEvt(coord.x, coord.y)
