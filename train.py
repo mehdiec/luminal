@@ -1,5 +1,6 @@
 import argparse
 import os
+import torch
 import yaml
 import pytorch_lightning as pl
 
@@ -257,14 +258,12 @@ def main(cfg):
         callbacks=[ckpt_callback, early_stop_callback],
     )
 
-    # if cfg["resume_version"]  is not None:
-    #     ckpt_path = (
-    #         cfg["logfolder"]   / f"luninal/{cfg["resume_version"]}/checkpoints/last.ckpt" #Pqth
-    #     )
-    #     checkpoint = torch.load(ckpt_path)
-    #     missing, unexpected = plmodule.load_state_dict(
-    #         checkpoint["state_dict"], strict=False
-    #     )
+    if cfg["ckpt_path"] is not None:
+        ckpt_path = cfg["ckpt_path"]
+        checkpoint = torch.load(ckpt_path)
+        missing, unexpected = plmodule.load_state_dict(
+            checkpoint["state_dict"], strict=False
+        )
     trainer.fit(
         plmodule,
         train_dataloaders=train_dl,
