@@ -194,7 +194,11 @@ def piechart(result):
     plt.tight_layout()
  
     # plt.title(f"Vrai valeur :    ")
-    pred = list(tt.mean(0))
+    mean = tt.mean(0)
+    mean = mean[:2]
+ 
+    pred = mean /mean.sum()
+  
     return {"prediction": {ID_TO_CLASS.get(i):pred[i] for i in range(len(pred))},"image":export_img(fig)}
 
 
@@ -203,6 +207,7 @@ def hist(result):
    
     temp_result = {}
     li = [np.array(result["prediction_patch"])[::, i] for i in range(3)]
+    dict_a = {"Luminal A": li[0],"Luminal B": li[1],"other": li[2]}
     for i, l in enumerate(li):
 
         fig, ax = plt.subplots()
@@ -210,6 +215,11 @@ def hist(result):
         ax.axvline(0.4, 0, 1, color="r", ls="--")
         plt.tight_layout()
         temp_result[ID_TO_CLASS.get(i)] = (export_img(fig))
+    fig, ax = plt.subplots()
+    sns.histplot(dict_a, kde=True, stat="percent", ax=ax)
+    ax.axvline(0.4, 0, 1, color="r", ls="--")
+    plt.tight_layout()
+    temp_result["wfull"] = (export_img(fig))
     return temp_result
 
 
@@ -329,7 +339,6 @@ def gradcam(x,y,slide_name, model,  num_classes=3):
     model = models.ResNet(num_classes)
 
     # Load the models for inference
-    print(sttdict.keys())
     model.load_state_dict(sttdict, strict=True)
     _ = model.eval()
 
@@ -407,6 +416,7 @@ def predict(model_name, file_name):
         infds,
         batch_size=32,
         num_workers=8,
+        shuffle=True
     )
     print("loaded")
     # creating unique log folder
