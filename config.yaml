@@ -16,14 +16,15 @@ num_workers: 8
 
 dropout : 0.5
 logfolder: /data/DeepLearning/mehdi/log
-model: vanilla #vit #[vanilla,"resnet",mobilenet]
+model: efficientnet #resnet50_ #vanilla #vit #[vanilla,"resnet",mobilenet]
 freeze : False
 pretrained : True
 loss: ce
-epochs: 30
-batch_size: 64
-lr: 0.001
+epochs: 50
+batch_size: 16
+lr: 0.0005
 wd: 0.01
 scheduler: one-cycle #["one-cycle", "cosine-anneal", "reduce-on-plateau"]
 group_norm: False
 grad_accumulation: 1
+ckpt_path : /data/DeepLearning/mehdi/log/luminal/efficientnet_7/luminal/a76ff44291d14379a5db9dfff073383f/checkpoints/epoch=30-val_loss_ce=0.000.ckpt

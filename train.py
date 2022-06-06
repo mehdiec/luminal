@@ -1,5 +1,6 @@
 import argparse
 import os
+import torch
 import yaml
 import pytorch_lightning as pl
 
@@ -121,23 +122,23 @@ def main(cfg):
                 Transpose(),
                 RandomRotate90(p=0.5),
                 # StainAugmentor(),
-                Rotate(
-                    always_apply=False,
-                    p=0.8,
-                    limit=(-90, 314),
-                    interpolation=2,
-                    border_mode=0,
-                    value=(1, 1, 1),
-                    mask_value=None,
-                ),
-                Cutout(
-                    always_apply=False,
-                    p=0.5,
-                    num_holes=40,
-                    max_w_size=60,
-                    max_h_size=60,
-                    fill_value=(1, 1, 1),
-                ),
+                # Rotate(
+                #     always_apply=False,
+                #     p=0.8,
+                #     limit=(-90, 314),
+                #     interpolation=2,
+                #     border_mode=0,
+                #     value=(1, 1, 1),
+                #     mask_value=None,
+                # ),
+                # Cutout(
+                #     always_apply=False,
+                #     p=0.5,
+                #     num_holes=10,
+                #     max_w_size=40,
+                #     max_h_size=40,
+                #     fill_value=(1, 1, 1),
+                # ),
                 ChannelShuffle(always_apply=False, p=0.5),
                 RGBShift(
                     always_apply=False,
@@ -187,6 +188,7 @@ def main(cfg):
         cfg["freeze"],
         cfg["pretrained"],
         cfg["dropout"],
+        cfg["patch_size"],
     )
 
     # creating unique log folder
@@ -247,7 +249,7 @@ def main(cfg):
 
     trainer = pl.Trainer(
         gpus=[cfg["gpu"]],
-        min_epochs=10,
+        min_epochs=30,
         max_epochs=50,
         logger=logger,
         precision=16,
@@ -256,14 +258,12 @@ def main(cfg):
         callbacks=[ckpt_callback, early_stop_callback],
     )
 
-    # if cfg["resume_version"]  is not None:
-    #     ckpt_path = (
-    #         cfg["logfolder"]   / f"luninal/{cfg["resume_version"]}/checkpoints/last.ckpt" #Pqth
-    #     )
-    #     checkpoint = torch.load(ckpt_path)
-    #     missing, unexpected = plmodule.load_state_dict(
-    #         checkpoint["state_dict"], strict=False
-    #     )
+    if cfg["ckpt_path"] is not None:
+        ckpt_path = cfg["ckpt_path"]
+        checkpoint = torch.load(ckpt_path)
+        missing, unexpected = plmodule.load_state_dict(
+            checkpoint["state_dict"], strict=False
+        )
     trainer.fit(
         plmodule,
         train_dataloaders=train_dl,

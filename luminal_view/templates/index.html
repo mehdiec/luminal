@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title> Predict lunminal </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style type="text/css">
+        /*
+     CSS for the main interaction
+    */
+        html {
+            width: 100wh;
+            height: 100vh;
+        }
+
+        .tabset {
+            height: 100%;
+            width: 100%;
+        }
+
+        .tabset>input[type="radio"] {
+            position: absolute;
+            left: -200vw;
+        }
+
+        .tabset .tab-panel {
+            display: none;
+        }
+
+        .tab-panels {
+            height: 100%;
+            width: 100%;
+        }
+
+        .tabset>input:first-child:checked~.tab-panels>.tab-panel:first-child,
+        .tabset>input:nth-child(3):checked~.tab-panels>.tab-panel:nth-child(2),
+        .tabset>input:nth-child(5):checked~.tab-panels>.tab-panel:nth-child(3),
+        .tabset>input:nth-child(7):checked~.tab-panels>.tab-panel:nth-child(4),
+        .tabset>input:nth-child(9):checked~.tab-panels>.tab-panel:nth-child(5),
+        .tabset>input:nth-child(11):checked~.tab-panels>.tab-panel:nth-child(6) {
+            display: flex;
+        }
+
+        /*
+     Styling
+    */
+        body {
+            font: 16px/1.5em "Overpass", "Open Sans", Helvetica, sans-serif;
+            color: #333;
+            font-weight: 300;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .tabset>label {
+            position: relative;
+            display: inline-block;
+            padding: 5px 15px 15px;
+            border: 1px solid transparent;
+            border-bottom: 0;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .tabset>label::after {
+            content: "";
+            position: absolute;
+            left: 15px;
+            bottom: 10px;
+            width: 22px;
+            height: 4px;
+            background: #8d8d8d;
+        }
+
+        .tabset>label:hover,
+        .tabset>input:focus+label {
+            color: #06c;
+        }
+
+        .tabset>label:hover::after,
+        .tabset>input:focus+label::after,
+        .tabset>input:checked+label::after {
+            background: #06c;
+            width: calc(100% - 30px);
+        }
+
+        .tabset>input:checked+label {
+            border-color: #ccc;
+            border-bottom: 1px solid #fff;
+            margin-bottom: -1px;
+        }
+
+        .tab-panel {
+            padding: 30px 0;
+            border-top: 1px solid #ccc;
+            height: 100%;
+            width: 100%;
+        }
+
+        /*
+     Demo purposes only
+    */
+        *,
+        *:before,
+        *:after {
+            box-sizing: border-box;
+        }
+
+        body {
+            padding: 30px;
+        }
+
+
+
+        .main-selector {
+            width: 100%;
+            height: 30px;
+            display: inline-flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .main-selector select {
+            width: 100%;
+        }
+
+        .btn {
+            -webkit-border-radius: 4px;
+            -moz-border-radius: 4px;
+            border-radius: 4px;
+            border: solid 1px #20538D;
+            text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.4);
+            -webkit-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 1px rgba(0, 0, 0, 0.2);
+            -moz-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 1px rgba(0, 0, 0, 0.2);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 1px 1px rgba(0, 0, 0, 0.2);
+            background: #4479BA;
+            color: #FFF;
+            padding: 8px 12px;
+            text-decoration: none;
+            user-select: none;
+            cursor: pointer;
+            margin: auto;
+            width: auto;
+        }
+
+        .btn:hover {
+            background: #4b8fe2;
+        }
+
+        #main {
+            margin-bottom: 30px;
+            display: grid;
+        }
+
+        .flex-container {
+            display: flex;
+            background-color: #FFF;
+        }
+
+        .flex-container>div {
+            background-color: #FFF;
+            margin: 10px;
+            padding: 20px;
+            font-size: 30px;
+            border: #333 solid 1px;
+        }
+
+        .wrapper {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            grid-auto-rows: minmax(100px, auto);
+        }
+
+
+        .scrolling {
+            position: absolute;
+            overflow-y: auto;
+            height: 100%;
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .scrolling>img {
+            width: calc(25% - 15px);
+        }
+
+        .scrolling>h2 {
+            width: 100%;
+            border-bottom: 1px solid #333;
+        }
+
+        p {
+            font-size: 15pt;
+        }
+
+        .heatmapView {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        .heatmapView img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .heatmapView img.heatmap {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            opacity: 0.5;
+            z-index: 10;
+        }
+
+        input[type=range][orient=vertical] {
+            writing-mode: bt-lr;
+            /* IE */
+            -webkit-appearance: slider-vertical;
+            /* Chromium */
+            width: 20px;
+            height: 100%;
+            padding: 0 5px;
+        }
+
+        section.radioBtn {
+            display: flex;
+            flex-flow: row wrap;
+        }
+
+        section.radioBtn>div {
+            flex: 1;
+            padding: 0.5rem;
+        }
+
+        section.radioBtn>div>input[type="radio"] {
+            display: none;
+        }
+
+        section.radioBtn>div>label {
+            display: block;
+            background: #F2F2F2;
+            border: 2px solid #5BACCF;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0px 3px 10px -2px hsla(150, 5%, 65%, 0.5);
+            position: relative;
+            cursor: pointer;
+        }
+
+        section.radioBtn>div>input[type="radio"]:checked+label {
+            background: #5BACCF;
+            color: #3B3B3B;
+            box-shadow: 0px 0px 5px #5BACCF;
+        }
+
+        @media only screen and (max-width: 700px) {
+            section.radioBtn {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="main">
+        <div class="main-selector">
+            <select id="filename">
+                <option value="">--Please select a slide--</option>
+                {%for i in range(list_slide|length)%}
+                <option value="{{list_slide[i]}}">{{list_slide[i]}}</option>
+                {%endfor%}
+
+            </select>
+            <select id="modelname">
+                <option value="">--Please choose an option--</option>
+                <option value="dog">Dog</option>
+                <option value="cat">Cat</option>
+                <option value="hamster">Hamster</option>
+                <option value="parrot">Parrot</option>
+                <option value="spider">Spider</option>
+                <option value="goldfish">Goldfish</option>
+            </select>
+        </div>
+        <a class="btn" onclick="run()">Run</a>
+    </div>
+    <div class="tabset" id="tabset">
+        <!-- Tab 1 -->
+        <input type="radio" name="tabset" id="tab1" aria-controls="prop" checked>
+        <label for="tab1">Proportion patchs</label>
+        <!-- Tab 2 -->
+        <input type="radio" name="tabset" id="tab2" aria-controls="hist">
+        <label for="tab2">Histogram</label>
+        <!-- Tab 3 -->
+        <input type="radio" name="tabset" id="tab3" aria-controls="patch">
+        <label for="tab3">Patch</label>
+        <input type="radio" name="tabset" id="tab4" aria-controls="heat">
+        <label for="tab4">Heatmap</label>
+        <!-- Tab 4 -->
+
+        <div class="tab-panels">
+
+
+            <section id="prop" class="tab-panel">
+                <div class="wrapper">
+                    <div style="grid-column: 1 / 3; grid-row: 1/3;">
+                        <p style="text-align:center">Proportion de patch classé Luminal A ou B</p>
+
+                        <img src="" width="100%" id="pie">
+                    </div>
+                    <div style="grid-column: 3 / 12; grid-row: 1 / 3;" id="pred_mean">
+                        <p style="text-align:center">Moyenne des prédictions sur les patchs</p>
+                    </div>
+
+                    <div style="grid-column: 1 / 3; grid-row: 3 / 5;">
+                    </div>
+                    <div style="grid-column: 3 / 5; grid-row: 3 / 5;">
+
+                    </div>
+
+                </div>
+
+            </section>
+            <section id="hist" class="tab-panel">
+                <div class="wrapper">
+                    <div style="grid-column: 1 / 2; grid-row: 1/3;">
+                        <img src="" width="100%" id="hist0">
+                        <p style="text-align:center">Histogramme des prédictions Luminal A</p>
+
+                    </div>
+                    <div style="grid-column: 2 / 3; grid-row: 1/3;">
+                        <img src="" width="100%" id="hist1">
+                        <p style="text-align:center">Histogramme des prédictions Luminal B</p>
+                    </div>
+                    <div style="grid-column: 3 / 4; grid-row: 1/3;">
+                        <img src="" width="100%" id="hist2">
+                        <p style="text-align:center">Histogramme des prédictions pour la classe other</p>
+                    </div>
+                    <div style="grid-column: 1 / 2; grid-row: 3/5;">
+
+                    </div>
+                    <div style="grid-column: 2 / 3; grid-row: 3/5;">
+
+                    </div>
+                    <div style="grid-column: 3 / 4; grid-row: 3/5;">
+
+                    </div>
+                </div>
+
+            </section>
+            <section id="patch" class="tab-panel">
+                <div style="position: relative;   height: 100%;  width: 50%;">
+                    <div class="scrolling" id="patch0">
+
+                    </div>
+                </div>
+                <div style=" width: 50%;" id="gradcam_galery">
+                    <!-- maybe here -->
+                    <!-- <div style="grid-column: 3 / 4; grid-row: 1/3;">
+
+                    </div> -->
+
+                </div>
+
+            </section>
+            <section id="heat" class="tab-panel">
+                <div style=" width: 50%;" id="label_heat">
+
+                </div>
+                <div style=" width: 50%;" id="gradcam_custom">
+
+                </div>
+
+
+            </section>
+
+        </div>
+
+    </div>
+
+</body>
+<script type="text/javascript">
+
+    document.getElementById("tabset").style.display = "none"
+
+    function create_image(img64) {
+        const domImg = document.createElement("img")
+        domImg.src = "data:image/png;base64," + img64
+
+        return domImg
+    }
+    function imageOnClick(elementRef) {
+        var posObject = getEventLocation(event);
+    }
+    function getEventLocation(eventRef) {
+        var bcr = event.target.getBoundingClientRect()
+        return { x: (eventRef.clientX - bcr.left) / (bcr.right - bcr.left), y: (eventRef.clientY - bcr.top) / (bcr.bottom - bcr.top) };
+    }
+    function clickOnGal(evt, element) {
+        const parent = document.getElementById("gradcam_galery")
+        parent.innerHTML = ""
+        const image = document.createElement("img")
+        image.src = "data:image/png;base64," + element.image
+        // mettre autre id
+        // document.getElementById("pred_galery").appendChild(getWidgetPrediction(element["prediction"]))
+        const btn_gradcam = document.createElement("a")
+        btn_gradcam.textContent = "GradCam"
+        btn_gradcam.classList.add("btn")
+
+        // <a class="btn" onclick="run()">Run</a>
+        const prediction = element["prediction"]
+        parent.appendChild(getWidgetPrediction(prediction))
+        parent.appendChild(image)
+        parent.appendChild(btn_gradcam)
+        btn_gradcam.addEventListener("click", (evt) => get_gradcam(element.pos_x, element.pos_y, (data) => {
+            parent.innerHTML = ""
+            parent.appendChild(getWidgetPrediction(prediction))
+            parent.appendChild(WidgetHeatmap("gradcamWidget", element.image, data))
+
+        }))
+
+    }
+    function get_gradcam(x, y, cb) {
+        const value = { "file_name": document.getElementById("filename").value, "x": x, "y": y }
+        const param = new URLSearchParams(value)
+        fetch("/gradcam?" + param).then((resp) => resp.json()).then(data => cb(data))
+    }
+    function run() {
+        document.getElementById("main").style.display = "none"
+        const value = { "file_name": document.getElementById("filename").value }
+        const param = new URLSearchParams(value)
+        fetch("/prediction?" + param).then((resp) => resp.json()).then(function (data) {
+            document.getElementById("tabset").style.display = null
+            var parent = document.getElementById("hist")
+            var count = 0
+            for (const label in data.hist) {
+                // parent.appendChild(create_image(data.hist[label]))
+                document.getElementById("hist" + count).src = "data:image/png;base64," + data.hist[label]
+                count++
+            }
+
+            // for (let i = 0; i < data.heatmap.length; i++) {
+            //     parent.appendChild(create_image(data.heatmap[i]))
+            // }
+            parent = document.getElementById("patch0")
+            for (const label in data.top) {
+                let title = document.createElement("h2")
+                title.textContent = label
+                parent.appendChild(title)
+                data.top[label].forEach(element => {
+                    let image = create_image(element.image)
+                    image.addEventListener("click", (evt) => clickOnGal(evt, element))
+                    parent.appendChild(image)
+                });
+            }
+            document.getElementById("pie").src = "data:image/png;base64," + data.piechart["image"]
+            document.getElementById("pie").style = "max-width:100%; height :auto"
+            document.getElementById("pred_mean").appendChild(getWidgetPrediction(data.piechart["prediction"]))
+
+            const baseSlide = data.heatmap["Raw Slide"]
+            delete data.heatmap["Raw Slide"]
+            document.getElementById("label_heat").appendChild(WidgetHeatmap("label_heat", baseSlide, data.heatmap, (x, y) => {
+                const containerGradcam = document.getElementById("gradcam_custom")
+                containerGradcam.innerHTML = ""
+                get_gradcam(x, y, (dataGrad) => {
+                    containerGradcam.innerHTML = ""
+                    const basePatch = dataGrad["patch raw"]
+                    delete dataGrad["patch raw"]
+                    containerGradcam.appendChild(WidgetHeatmap("customgradcamWidget", basePatch, dataGrad))
+                })
+            }))
+        })
+
+    }
+    function WidgetHeatmap(id, baseImg, DictHeatmap, clickEvt) {
+        let container = document.createElement("div")
+        container.style = "width:100%; display: flex; flex-direction: column;"
+        let viewerContainer = document.createElement("div")
+        viewerContainer.style.display = "flex"
+        container.appendChild(viewerContainer)
+        let heatmapViewer = document.createElement('div')
+        heatmapViewer.classList.add("heatmapView")
+        viewerContainer.appendChild(heatmapViewer)
+        let imgHeatmap = document.createElement('img')
+        imgHeatmap.classList.add("heatmap")
+        heatmapViewer.appendChild(imgHeatmap)
+        let imgBase = document.createElement('img')
+        imgBase.src = "data:image/png;base64," + baseImg
+        heatmapViewer.appendChild(imgBase)
+        let sliderOpacity = document.createElement('input')
+        sliderOpacity.type = "range"
+        sliderOpacity.setAttribute('orient', "vertical")
+        sliderOpacity.addEventListener('input', (evt) => { imgHeatmap.style.opacity = parseInt(sliderOpacity.value) / 100 * 0.7; })
+        viewerContainer.appendChild(sliderOpacity)
+        let containerHeatmapSelector = document.createElement('section')
+        containerHeatmapSelector.classList.add("radioBtn")
+        Object.keys(DictHeatmap).forEach((k, i) => {
+            let btnContainer = document.createElement('div')
+            let inputRadio = document.createElement('input')
+            inputRadio.type = "radio"
+            inputRadio.name = id + "_heatmapSelector"
+            inputRadio.id = id + "_heatmapSelector_" + i
+            inputRadio.value = k
+            inputRadio.addEventListener('change', (evt) => { imgHeatmap.src = "data:image/png;base64," + DictHeatmap[k] })
+
+            btnContainer.appendChild(inputRadio)
+            let inputLabel = document.createElement('label')
+            inputLabel.textContent = k
+            inputLabel.setAttribute('for', id + "_heatmapSelector_" + i)
+            btnContainer.appendChild(inputLabel)
+            if (i == 0) {
+                inputRadio.checked = true
+                imgHeatmap.src = "data:image/png;base64," + DictHeatmap[k]
+            }
+            containerHeatmapSelector.appendChild(btnContainer)
+        });
+        container.appendChild(containerHeatmapSelector)
+        if (clickEvt) {
+            imgHeatmap.addEventListener("click", (evt) => {
+                const coord = getEventLocation(evt)
+                clickEvt(coord.x, coord.y)
+            })
+        }
+        return container
+    }
+
+    function getWidgetPrediction(data) {
+        var svgNS = "http://www.w3.org/2000/svg";
+        drawRect = (x, y, w, h) => {
+            const shape = document.createElementNS(svgNS, "rect");
+            shape.setAttributeNS(null, "rx", 1);
+            shape.setAttributeNS(null, "ry", 1);
+            shape.setAttributeNS(null, "x", x);
+            shape.setAttributeNS(null, "y", y);
+            shape.setAttributeNS(null, "width", w);
+            shape.setAttributeNS(null, "height", h);
+            shape.setAttributeNS(null, "fill", 'none');
+            return shape;
+        }
+        drawText = (x, y, size, text) => {
+            const newText = document.createElementNS(svgNS, "text");
+            newText.setAttributeNS(null, "x", x);
+            newText.setAttributeNS(null, "y", y);
+            newText.setAttributeNS(null, "font-size", size);
+            newText.setAttributeNS(null, "font-family", "Arial, sans-serif")
+            const textNode = document.createTextNode(text);
+            newText.appendChild(textNode);
+            return newText
+        }
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        //svg.setAttribute('fill', 'none');
+        svg.setAttribute('viewBox', '0 0 100 33');
+        tabColor = ['#45B8DE', '#DEA845', '#888']
+        Object.keys(data).forEach((k, i) => {
+            const b = drawRect(0, (i + i * 0.2) * 4 + 0.2, 70, 4)
+            b.setAttributeNS(null, "stroke", 'black');
+            b.setAttributeNS(null, "stroke-width", 0.2)
+            const p = drawRect(0, (i + i * 0.2) * 4 + 0.2, 70 * parseFloat(data[k]), 4)
+            p.setAttributeNS(null, "fill", tabColor[i]);
+            const txt = drawText(72, (i + i * 0.2) * 4 + 3.7, 2.5, (parseFloat(data[k]) * 100).toFixed(2) + '% ' + k)
+            svg.appendChild(p)
+            svg.appendChild(b)
+            svg.appendChild(txt)
+        })
+        return svg
+    }
+
+
+
+
+
+
+</script>
+
+</html>

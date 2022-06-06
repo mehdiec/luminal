@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     _LRScheduler,
 )
+import torch.nn.functional as F
 from torchmetrics import ROC, ConfusionMatrix
 from torchmetrics.functional import auc
 from torchvision.transforms.functional import to_pil_image
@@ -127,8 +128,9 @@ class BasicClassificationModule(pl.LightningModule):
 
         x = next(iter(self.train_dl))
         for img in x["image"]:
+            out = F.interpolate(img, size=256)  # The resize operation on tensor.
             self.logger.experiment.log_image(
-                img, image_channels="first", image_minmax=(0.0, 1.0)
+                out, image_channels="first", image_minmax=(0.0, 1.0)
             )
 
     def training_step(self, batch: Tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
