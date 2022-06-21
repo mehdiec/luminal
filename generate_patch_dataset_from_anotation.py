@@ -198,8 +198,10 @@ if __name__ == "__main__":
                             row = patch.to_csv_row()
                             row["label"] = 2
                             writer.writerow(row)
+                        break
                     else:
                         # print("junk")
                         row = patch.to_csv_row()
                         row["label"] = 2
                         writer.writerow(row)
+                        break

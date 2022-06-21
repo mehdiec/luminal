@@ -6,9 +6,9 @@ import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 from torch.utils.data import DataLoader
 
-from src.data_loader import SingleSlideInference
-from src.transforms import ToTensor
-from src import models
+from deep_learning.data_loader import SingleSlideInference
+from deep_learning.transforms import ToTensor
+from deep_learning import models
 from utils import hist, top, test, heatmap, piechart
 
 

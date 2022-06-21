@@ -3,7 +3,7 @@ import cv2
 import os.path
 import torch
 
-from src.models import ResNet
+from deep_learning.models import ResNet
 from utils import gradcam
  
  

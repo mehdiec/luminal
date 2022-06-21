@@ -5,4 +5,7 @@
 *.ipynb
 *.log
 *.jpg
+*.csv
+*.png
+*.json
 __pycache__
