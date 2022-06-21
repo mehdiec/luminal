@@ -6,7 +6,7 @@ import yaml
 from pathaia.util.types import Slide
 from pytorch_lightning.utilities.seed import seed_everything
 
-from src import models
+from deep_learning import models
 from utils import gradcam, patch_from_coord
 
 

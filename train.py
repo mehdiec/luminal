@@ -28,9 +28,9 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.utilities.seed import seed_everything
 from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
 
-from src.preprocess import load_patches
-from src.transforms import StainAugmentor, ToTensor
-from src import models, pl_modules_temp, losses, utils
+from deep_learning.preprocess import load_patches
+from deep_learning.transforms import StainAugmentor, ToTensor
+from deep_learning import models, pl_modules_temp, losses, utils
 
 shuft = 60 / 255
 
@@ -67,22 +67,15 @@ def main(cfg):
     # check for transformation
     transforms = [ToTensor()]
     if cfg["transform"]:
-        if cfg["patch_size"] == 2048:
+        if cfg["patch_size"] == 1024:
             transforms = [
-                Resize(1024, 1024),
-                # Resize(256, 256),
+                # Resize(1024, 1024),
+                Resize(256, 256),
                 # CenterCrop(224,224)
                 Flip(),
                 Transpose(),
                 RandomRotate90(),
                 ChannelShuffle(always_apply=False, p=0.5),
-                RandomBrightnessContrast(
-                    brightness_limit=0.2,
-                    contrast_limit=(-0.3, 0.05),
-                    brightness_by_max=True,
-                    always_apply=False,
-                    p=0.8,
-                ),
                 RGBShift(
                     always_apply=False,
                     p=0.5,
@@ -90,29 +83,16 @@ def main(cfg):
                     g_shift_limit=(-shuft, shuft),
                     b_shift_limit=(-shuft, shuft),
                 ),
+                RandomBrightnessContrast(
+                    brightness_limit=0.2,
+                    contrast_limit=(-0.3, 0.05),
+                    brightness_by_max=True,
+                    always_apply=False,
+                    p=0.5,
+                ),
                 Blur(always_apply=False, p=0.5, blur_limit=(3, 4)),
-                # Cutout(
-                #     always_apply=False,
-                #     p=0.5,
-                #     num_holes=40,
-                #     max_h_size=60,
-                #     max_w_size=60,
-                #     fill_value=(1, 1, 1),
-                # ),
-                # Rotate(always_apply=False, p=.5, limit=(-10, 10), interpolation=4, border_mode=2, value=(0, 0, 0), mask_value=None),
-                # Rotate(
-                #     always_apply=False,
-                #     p=0.8,
-                #     limit=(-90, 314),
-                #     interpolation=2,
-                #     border_mode=0,
-                #     value=(1, 1, 1),
-                #     mask_value=None,
-                # ),
-                # StainAugmentor(),
                 # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ToTensor(),
-                # RandomSunFlare(flare_roi=(0, 0, 1, 1), angle_lower=0.5, p=1,src_color=(255, 255, 255)),
             ]
         else:
             transforms = [
@@ -139,14 +119,14 @@ def main(cfg):
                 #     max_h_size=40,
                 #     fill_value=(1, 1, 1),
                 # ),
-                ChannelShuffle(always_apply=False, p=0.5),
-                RGBShift(
-                    always_apply=False,
-                    p=0.5,
-                    r_shift_limit=(-shuft, shuft),
-                    g_shift_limit=(-shuft, shuft),
-                    b_shift_limit=(-shuft, shuft),
-                ),
+                # ChannelShuffle(always_apply=False, p=0.5),
+                # RGBShift(
+                #     always_apply=False,
+                #     p=0.5,
+                #     r_shift_limit=(-shuft, shuft),
+                #     g_shift_limit=(-shuft, shuft),
+                #     b_shift_limit=(-shuft, shuft),
+                # ),
                 RandomBrightnessContrast(
                     brightness_limit=0.2,
                     contrast_limit=(-0.3, 0.05),

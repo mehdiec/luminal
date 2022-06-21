@@ -7,10 +7,10 @@ from pytorch_lightning.utilities.seed import seed_everything
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from src import models
-from src.data_loader import SingleSlideInference
-from src.preprocess import load_patches
-from src.transforms import ToTensor
+from deep_learning import models
+from deep_learning.data_loader import SingleSlideInference
+from deep_learning.preprocess import load_patches
+from deep_learning.transforms import ToTensor
 
 
 def infer(model, loader, device="cuda:0"):
