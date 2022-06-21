@@ -107,6 +107,7 @@ class ResNet(nn.Module):
         self.global_pool = self.resnet.global_pool
 
         # classifier
+        # self.fc = nn.Sequential(nn.Dropout2d(0.5), nn.Linear(infeat, num_classes))
         self.fc = nn.Linear(infeat, num_classes)
         # nn.Sequential(
         #     nn.Dropout2d(0.5), nn.Linear(infeat, num_classes)
@@ -198,6 +199,7 @@ def build_model(
         model = resnet
     elif model_name == "vit":
         model = ViTBase16(num_classes=1)
+
     elif model_name == "efficientnet":
         model = timm.create_model("efficientnet_b5", pretrained=True)
         infeat = model.classifier.in_features

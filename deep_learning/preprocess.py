@@ -5,9 +5,9 @@ from torch.utils.data import WeightedRandomSampler, DataLoader
 from tqdm import tqdm
 
 
-from src import data_loader
-from src.transforms import ToTensor
-from src.utils import progress_bar
+from deep_learning import data_loader
+from deep_learning.transforms import ToTensor, StainAugmentor
+from deep_learning.utils import progress_bar
 
 
 # def compute_mean_std(loader):
@@ -93,11 +93,11 @@ def load_patches(
     num_classes=3,
     balance=False,
 ):
-    if patch_size == 2048:
+    if patch_size == 256:
         transforms_val = [
             # Normalize(mean=[0.0, 0.0, 0.0], std=[1.0, 1.0, 1.0]),
             # Normalize(mean=[0.8459, 0.7529, 0.8145], std=[0.1182, 0.1480, 0.1139]),
-            Resize(1024, 1024),
+            Resize(256, 256),
             # Normalize(mean=[0.8441, 0.7498, 0.8135], std=[0.1188, 0.1488, 0.1141]),
             # Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             # Resize(384, 384),
@@ -105,7 +105,7 @@ def load_patches(
         ]
     else:
         transforms_val = [
-            # Resize(256, 256),
+            # StainAugmentor(),
             # CenterCrop(224, 224),
             # CenterCrop(256, 256),
             ToTensor(),
@@ -148,12 +148,12 @@ def load_patches(
         num_classes=num_classes,
     )
     if balance:
-        # class_weights = [
-        #     len(train_ds) / train_ds.labels.count(0),
-        #     len(train_ds) / train_ds.labels.count(1),
-        #     len(train_ds) / train_ds.labels.count(2),
-        # ]
-        class_weights = [10, 10, 1]
+        class_weights = [
+            len(train_ds) / train_ds.labels.count(0),
+            len(train_ds) / train_ds.labels.count(1),
+            len(train_ds) / train_ds.labels.count(2),
+        ]
+        # class_weights = [100, 100, 1]
 
         sample_weights = [0] * len(train_ds)
 
@@ -186,5 +186,17 @@ def load_patches(
         val_ds,
         batch_size=batch_size,
         num_workers=num_workers,
+    )
+    print(
+        {
+            "luminal A": train_ds.labels.count(0),
+            "luminal B": train_ds.labels.count(1),
+            "trash": train_ds.labels.count(2),
+        },
+        {
+            "luminal A": val_ds.labels.count(0),
+            "luminal B": val_ds.labels.count(1),
+            "trash": val_ds.labels.count(2),
+        },
     )
     return train_dl, val_dl
