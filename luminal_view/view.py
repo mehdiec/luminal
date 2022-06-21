@@ -2,8 +2,9 @@ from glob import glob
 import json
 from flask import Flask, render_template, Response, request
 import numpy as np
+import pandas as pd
 
-from predict import export_img_cv2, gradcam, predict, top
+from predict import calculation, export_img_cv2, gradcam, patches, predict, statis, top
 from pathaia.util.types import Slide
 
 app = Flask(__name__)
@@ -15,24 +16,47 @@ def hello_world():
         p.split("/")[-1] for p in glob("/media/AprioricsSlides" + "/*" + "-1-??-1_*")
     ]
     file_name = "/home/mehdi/code/luminal/test.json"
+    model_list = [p for p in glob("/data/DeepLearning/mehdi/top_gear/*")]
     with open(file_name, "r") as f:
         slide_thum = json.load(f)
     # slide_thum = ["data:image/png;base64," + img for img in slide_thum]
 
-    return render_template("test.html", list_slide=list_slide, slide_thum=slide_thum)
+    return render_template(
+        "test.html", model_list=model_list, list_slide=list_slide, slide_thum=slide_thum
+    )
+
+
+@app.route("/ft")
+def hi():
+    list_slide = [
+        p.split("/")[-1].split(".")[0]
+        for p in glob("/home/mehdi/code/luminal/data/geojson_lum" + "/*")
+    ]
+    # file_name = "/home/mehdi/code/luminal/test.json"
+    # model_list = [p for p in glob("/data/DeepLearning/mehdi/top_gear/*")]
+    # with open(file_name, "r") as f:
+    # slide_thum = json.load(f)
+    # slide_thum = ["data:image/png;base64," + img for img in slide_thum]
+
+    return render_template(
+        "feature_index.html",
+        list_slide=list_slide,
+    )
 
 
 @app.route("/prediction", methods=["GET"])
 def api_prediction():
     file_name = request.args.get("file_name")
-    model_name = "/data/DeepLearning/mehdi/log/luminal/resnet_319/luminal/15a61c98fef74769ac047e1ba1654c66/checkpoints/epoch=10-val_loss_ce=0.000.ckpt"
+    model_name = request.args.get("model_name")
+    print(model_name)
+    # model_name = "/data/DeepLearning/mehdi/log/luminal/resnet_319/luminal/15a61c98fef74769ac047e1ba1654c66/checkpoints/epoch=10-val_loss_ce=0.000.ckpt"
     return predict(model_name, file_name)
 
 
 @app.route("/shuffle", methods=["GET"])
 def api_shuffle():
     file_name = request.args.get("file_name")
-    model_name = "/data/DeepLearning/mehdi/log/luminal/resnet_319/luminal/15a61c98fef74769ac047e1ba1654c66/checkpoints/epoch=10-val_loss_ce=0.000.ckpt"
+    model_name = request.args.get("model_name")
     return predict(model_name, file_name)["top"]
 
 
@@ -41,5 +65,34 @@ def api_gradcam():
     file_name = request.args.get("file_name")
     x = float(request.args.get("x"))
     y = float(request.args.get("y"))
-    model_name = "/data/DeepLearning/mehdi/log/luminal/resnet_319/luminal/15a61c98fef74769ac047e1ba1654c66/checkpoints/epoch=10-val_loss_ce=0.000.ckpt"
+    model_name = request.args.get("model_name")
     return gradcam(x, y, file_name, model_name)
+
+
+@app.route("/patches", methods=["GET"])
+def api_patches():
+    file_name = request.args.get("file_name")
+    file_name_ = request.args.get("file_name_")
+    print(file_name, file_name_)
+
+    return patches(file_name, file_name_)
+
+
+@app.route("/shuffles", methods=["GET"])
+def api_patchess():
+    file_name = request.args.get("file_name")
+    file_name_ = request.args.get("file_name_")
+    print(file_name, file_name_)
+
+    return patches(file_name, file_name_)
+
+
+@app.route("/stat", methods=["GET"])
+def api_stat():
+    file_name = request.args.get("file_name")
+    x = float(request.args.get("x"))
+    y = float(request.args.get("y"))
+    df = pd.read_csv("/home/mehdi/code/luminal/21I000004-1-03-1_135435.csv")
+    # df = calculation(file_name, x, y)
+
+    return statis(df)
