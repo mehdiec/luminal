@@ -43,10 +43,10 @@ def apply_preprocessing(cfg, data, test=False):
             data["x_valid"] = pipeline.transform(data["x_valid"])
 
             # Save the pipeline
-            pickle.dump(
-                pipeline,
-                open(os.path.join("./data/normalized_data", name + ".pck"), "wb"),
-            )
+            # pickle.dump(
+            #     pipeline,
+            #     open(os.path.join("./data/normalized_data", name + ".pck"), "wb"),
+            # )
 
         return data
 
