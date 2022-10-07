@@ -1,14 +1,14 @@
+import argparse
 import csv
-import json
 import cv2
+import json
 import numpy as np
 import pandas as pd
-import argparse
 import yaml
-from pathaia.util.types import Slide
-from tqdm import tqdm
 
 from glob import glob
+
+from pathaia.util.types import Slide
 from constante import COLORS, EPSILON, GEOMETRIES
 from utils import (
     blue,
@@ -38,7 +38,9 @@ from utils import (
     value_hsv_mean,
     value_hsv_std,
     get_displayde_imaged,
+    export_img_cv2,
 )
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument(
@@ -79,52 +81,58 @@ def main(
     df = df[df["x,y,w,h"].apply(valid_bbox, p_size=p_size)]
 
     # Geom
-    df["area"] = df["contours_np"].apply(cv2.contourArea)
-    df["gd_ax"] = df["contours_np"].apply(elipsea)
-    df["pt_ax"] = df["contours_np"].apply(elipseb)
-    df["radius"] = df["x,y,w,h"].apply(radiuses)
-    df["length"] = df["contours_np"].apply(length)
-    df["compactness"] = (4 * np.pi * df["area"]) / ((df["length"]) ** 2 + EPSILON)
-    df["eliptic_fit"] = df["area"] / (np.pi * df["gd_ax"] * df["pt_ax"] + EPSILON)
-    df["enclosing_circle_overlap"] = df["area"] / (
+
+    df.loc[:, "area"] = df["contours_np"].apply(cv2.contourArea)
+    df.loc[:, "gd_ax"] = df["contours_np"].apply(elipsea)
+    df.loc[:, "pt_ax"] = df["contours_np"].apply(elipseb)
+    df.loc[:, "radius"] = df["x,y,w,h"].apply(radiuses)
+    df.loc[:, "length"] = df["contours_np"].apply(length)
+    df.loc[:, "compactness"] = (4 * np.pi * df["area"]) / (
+        (df["length"]) ** 2 + EPSILON
+    )
+    df.loc[:, "eliptic_fit"] = df["area"] / (
+        np.pi * df["gd_ax"] * df["pt_ax"] + EPSILON
+    )
+    df.loc[:, "enclosing_circle_overlap"] = df["area"] / (
         np.pi * df["radius"] * df["radius"] + EPSILON
     )
-    df["length_width_ratio"] = df["gd_ax"] / df["pt_ax"]
-    df["Eccentricity"] = np.sqrt(1 - 1 / df["length_width_ratio"])
-    df["smoothmess"] = df["length"] / (4 * np.sqrt(df["area"]))
-    df["convex_area"] = df["contours_np"].apply(convex_area)
-    df["iou"] = df["area"] / df["convex_area"]
+    df.loc[:, "length_width_ratio"] = df["gd_ax"] / df["pt_ax"]
+    df.loc[:, "Eccentricity"] = np.sqrt(1 - 1 / df["length_width_ratio"])
+    df.loc[:, "smoothmess"] = df["length"] / (4 * np.sqrt(df["area"]))
+    df.loc[:, "convex_area"] = df["contours_np"].apply(convex_area)
+    df.loc[:, "iou"] = df["area"] / df["convex_area"]
 
     # nuc images
-    df["nuc_img"] = df["bbox_centered"].progress_apply(
+    df.loc[:, "nuc_img"] = df["bbox_centered"].progress_apply(
         get_color_nuc, image=IMAGE, p_size=p_size
     )
-    df["gscale_img"] = df["bbox_centered"].progress_apply(
+    df.loc[:, "gscale_img"] = df["bbox_centered"].progress_apply(
         get_gray_scale_nuc, image=IMAGE_GRAY, p_size=p_size
     )
     if cfg["display"] == True:
         df["image"] = df.progress_apply(
-            get_displayde_imaged, image=IMAGE, p_size=p_size
+            get_displayde_imaged, image=IMAGE, p_size=p_size, axis=1
         )
+        df["image"] = df["image"].progress_apply(export_img_cv2)
 
     # color feature
-    df["hue_mean"] = df["nuc_img"].progress_apply(hue_mean)
-    df["hue_std"] = df["nuc_img"].progress_apply(hue_std)
-    df["saturation_mean"] = df["nuc_img"].progress_apply(saturation_mean)
-    df["value_hsv_mean"] = df["nuc_img"].progress_apply(value_hsv_mean)
-    df["saturation_std"] = df["nuc_img"].progress_apply(saturation_std)
-    df["value_hsv_std"] = df["nuc_img"].progress_apply(value_hsv_std)
-    df["normalized_red_intensity"] = df["nuc_img"].progress_apply(red)
-    df["normalized_green_intensity"] = df["nuc_img"].progress_apply(green)
-    df["normalized_blue_intensity"] = df["nuc_img"].progress_apply(blue)
-    df["h_mean"] = df["nuc_img"].progress_apply(h_mean)
-    df["e_mean"] = df["nuc_img"].progress_apply(e_mean)
-    df["h_std"] = df["nuc_img"].progress_apply(h_std)
-    df["e_std"] = df["nuc_img"].progress_apply(e_std)
+    df.loc[:, "hue_mean"] = df["nuc_img"].progress_apply(hue_mean)
+    df.loc[:, "hue_std"] = df["nuc_img"].progress_apply(hue_std)
+    df.loc[:, "saturation_mean"] = df["nuc_img"].progress_apply(saturation_mean)
+    df.loc[:, "value_hsv_mean"] = df["nuc_img"].progress_apply(value_hsv_mean)
+    df.loc[:, "saturation_std"] = df["nuc_img"].progress_apply(saturation_std)
+    df.loc[:, "value_hsv_std"] = df["nuc_img"].progress_apply(value_hsv_std)
+    df.loc[:, "normalized_red_intensity"] = df["nuc_img"].progress_apply(red)
+    df.loc[:, "normalized_green_intensity"] = df["nuc_img"].progress_apply(green)
+    df.loc[:, "normalized_blue_intensity"] = df["nuc_img"].progress_apply(blue)
+    df.loc[:, "h_mean"] = df["nuc_img"].progress_apply(h_mean)
+    df.loc[:, "e_mean"] = df["nuc_img"].progress_apply(e_mean)
+    df.loc[:, "h_std"] = df["nuc_img"].progress_apply(h_std)
+    df.loc[:, "e_std"] = df["nuc_img"].progress_apply(e_std)
 
     # texture feature
-    df["hus"] = df["gscale_img"].progress_apply(get_hu)
-    df["flcm"] = df["gscale_img"].progress_apply(glcm)
+    df.loc[:, "hus"] = df["gscale_img"].progress_apply(get_hu)
+    df.loc[:, "flcm"] = df["gscale_img"].progress_apply(glcm)
 
     return df
 
@@ -218,6 +226,8 @@ if __name__ == "__main__":
                             "slide",
                         ]
                     )
+                    if config_file["display"] == True:
+                        col += ["image"]
                     result[col].to_csv(
                         output_folder + f"{file}_{x}_{y}_{transformation}.csv"
                     )

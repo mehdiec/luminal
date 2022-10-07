@@ -311,3 +311,74 @@ class ClassificationDatasetTest(Dataset):
         }
 
         return image_with_slide_idx  #
+
+
+class SingleSlideInference(Dataset):
+    def __init__(
+        self,
+        slide_file: str,
+        slide_backend: str = "cucim",
+        level: int = 0,
+        patch_size: int = 1024,
+        transforms: Optional[Sequence[BasicTransform]] = None,
+    ):
+        """_summary_
+        Args:
+            slide_file (str): file name with its full path containing the data split
+            outfolder (Path, optional): folder containing all the data used in the loader. Defaults to Path("/data/DeepLearning/mehdi").
+            transforms (Optional[Sequence[BasicTransform]], optional): image transformation used for data augmentation. Defaults to None.
+            slide_backend (str, optional): how we chose to open our slides with. Defaults to "cucim".
+            split (str, optional): the split to load. Defaults to "train".
+            noted (bool, optional): chose whether to load the slide noted or not. Defaults to False.
+        """
+        super().__init__()
+        # info retrieved from the csv
+
+        self.slides = []
+        self.patches = []
+        self.transforms = Compose(ifnone(transforms, []))
+        slide_idx = 0
+        slide_path = "/media/AprioricsSlides/" + slide_file
+        self.slide = Slide(slide_path, backend=slide_backend)
+        for patch in slide_rois_no_image(
+            self.slide,
+            level,
+            psize=patch_size,
+            interval=0,
+            slide_filters=[filter_thumbnail],
+            thumb_size=2000,
+        ):
+            self.patches.append(patch)
+
+        # self.clean()
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[Union[np.ndarray, torch.Tensor], Union[np.ndarray, torch.Tensor]]:
+        patch = self.patches[idx]
+
+        slide_region = (
+            np.asarray(
+                self.slide.read_region(patch.position, patch.level, patch.size).convert(
+                    "RGB"
+                ),
+                dtype=np.float32,
+            )
+            / 255.0
+        )
+        if self.transforms:
+            transformed = self.transforms(image=slide_region)
+        # image = to_pil_image(slide_region)
+
+        image_with_slide_idx = {
+            "image": transformed["image"],
+            # .transpose(2, 0)
+            # .transpose(0, 1),  # .transpose(2, 0, 1),
+            "pos_x": patch.position.x,
+            "pos_y": patch.position.y,
+        }
+
+        return image_with_slide_idx  #
