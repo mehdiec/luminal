@@ -30,9 +30,9 @@ from torchmetrics import F1Score, Precision, Recall, Specificity, Accuracy
 
 from deep_learning.preprocess import load_patches
 from deep_learning.transforms import StainAugmentor, ToTensor
-from deep_learning import models, pl_modules_temp, losses, utils
+from deep_learning import models, pl_modules, losses, utils
 
-shuft = 60 / 255
+shuft = 10 / 255
 
 # Init the parser
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -50,21 +50,10 @@ args = parser.parse_args()
 
 
 def main(cfg):
-    # if args.horovod:
-    #     hvd.init()
     print("main")
 
     seed_everything(workers=True)
 
-    # if args.stain_matrices_folder is not None:
-    #     stain_matrices_paths = mask_paths.map(
-    #         lambda x: args.stain_matrices_folder / x.with_suffix(".npy").name
-    #     )
-    #     stain_matrices_paths = stain_matrices_paths[train_idxs]
-    # else:
-    #     stain_matrices_paths = None
-
-    # check for transformation
     transforms = [ToTensor()]
     if cfg["transform"]:
         if cfg["patch_size"] == 1024:
@@ -111,22 +100,22 @@ def main(cfg):
                 #     value=(1, 1, 1),
                 #     mask_value=None,
                 # ),
-                # Cutout(
-                #     always_apply=False,
-                #     p=0.5,
-                #     num_holes=10,
-                #     max_w_size=40,
-                #     max_h_size=40,
-                #     fill_value=(1, 1, 1),
-                # ),
-                # ChannelShuffle(always_apply=False, p=0.5),
-                # RGBShift(
-                #     always_apply=False,
-                #     p=0.5,
-                #     r_shift_limit=(-shuft, shuft),
-                #     g_shift_limit=(-shuft, shuft),
-                #     b_shift_limit=(-shuft, shuft),
-                # ),
+                Cutout(
+                    always_apply=False,
+                    p=0.5,
+                    num_holes=10,
+                    max_w_size=40,
+                    max_h_size=40,
+                    fill_value=(1, 1, 1),
+                ),
+                ChannelShuffle(always_apply=False, p=0.5),
+                RGBShift(
+                    always_apply=False,
+                    p=0.5,
+                    r_shift_limit=(-shuft, shuft),
+                    g_shift_limit=(-shuft, shuft),
+                    b_shift_limit=(-shuft, shuft),
+                ),
                 RandomBrightnessContrast(
                     brightness_limit=0.2,
                     contrast_limit=(-0.3, 0.05),
@@ -150,11 +139,12 @@ def main(cfg):
         patch_size=cfg["patch_size"],
         num_classes=cfg["num_classes"],
         balance=cfg["balance"],
+        fold_id=cfg["fold_id"],
     )
     print("loaded")
 
     # initialize the scheduler
-    scheduler_func = pl_modules_temp.get_scheduler_func(
+    scheduler_func = pl_modules.get_scheduler_func(
         cfg["scheduler"],
         total_steps=ceil(len(train_dl) / (cfg["grad_accumulation"])) * cfg["epochs"],
         lr=cfg["lr"],
@@ -193,7 +183,7 @@ def main(cfg):
         project_name="luminal",
         auto_metric_logging=True,
     )
-    plmodule = pl_modules_temp.BasicClassificationModule(
+    plmodule = pl_modules.BasicClassificationModule(
         model,
         lr=cfg["lr"],
         wd=cfg["wd"],
@@ -216,7 +206,7 @@ def main(cfg):
     # checkpoint model to save
     ckpt_callback = ModelCheckpoint(
         save_top_k=3,
-        monitor="Accuracy_patch",
+        monitor="Accuracy_slide_mean",
         save_last=True,
         mode="max",
         filename=f"{{epoch}}-{{val_loss_{loss}:.3f}}",
@@ -229,8 +219,8 @@ def main(cfg):
 
     trainer = pl.Trainer(
         gpus=[cfg["gpu"]],
-        min_epochs=30,
-        max_epochs=50,
+        min_epochs=10,
+        max_epochs=20,
         logger=logger,
         precision=16,
         accumulate_grad_batches=cfg["grad_accumulation"],
@@ -258,5 +248,6 @@ if __name__ == "__main__":
         config_file = yaml.load(ymlfile, Loader=yaml.Loader)
 
     print(config_file)
-
-    main(cfg=config_file)
+    for i in range(5):
+        config_file["fold_id"] = i
+        main(cfg=config_file)
