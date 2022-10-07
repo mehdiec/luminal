@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title> Predict lunminal </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+
+<body>
+    <div id="main">
+        <div class="main-selector">
+            <select id="filename">
+                <option value="">--Please select a slide--</option>
+                {%for i in range(list_slide|length)%}
+                <option value="{{list_slide[i]}}">{{list_slide[i]}}</option>
+                {%endfor%}
+
+            </select>
+
+        </div>
+        <a class="btn" onclick="run()">Run</a>
+        <a class="btn" onclick="downloadObjectAsJson()">Save</a>
+        <div style=" width: 50%;" id="galery">
+            <!-- maybe here -->
+            <!-- <div style="grid-column: 3 / 4; grid-row: 1/3;">
+
+            </div> -->
+
+            <figure id="galery_figure">
+
+            </figure>
+
+
+        </div>
+        <!-- <ul class="wrapper">
+
+            <li class="icon twitter" onclick="lymph()">
+                <span class="tooltip">YES</span>
+                <span><i class="fab fa-twitter"></i></span>
+            </li>
+
+            <li class="icon youtube" onclick="other()">
+                <span class="tooltip">NO</span>
+                <span><i class="fab fa-youtube"></i></span>
+            </li>
+            <li class="icon github" onclick="lyhph()">
+                <span class="tooltip">MAYBE</span>
+                <span><i class="fab fa-github"></i></span>
+            </li>
+        </ul> -->
+    </div>
+
+
+</body>
+<script type="text/javascript" src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+
+
+
+
+</html>
