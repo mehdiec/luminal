@@ -1,32 +1,72 @@
-# pylint: disable=invalid-name
-"""Create Machine Learning Regressor models."""
-from sklearn.ensemble import (
-    ExtraTreesRegressor,
-    GradientBoostingRegressor,
-    RandomForestRegressor,
-)
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.svm import NuSVR
+import xgboost
+
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import NuSVC
 
 
-def models(cfg):
-    """Return a ML Regression model
-
-    Args:
-        cfg (dict): configuration file
-
-    Returns:
-        sklearn.Model: ML model
-    """
-    if cfg["MODELS"]["ML"]["TYPE"] == "RandomForest":
-        model = RandomForestRegressor(**cfg["MODELS"]["ML"]["RandomForest"])
-    elif cfg["MODELS"]["ML"]["TYPE"] == "ExtraTrees":
-        model = ExtraTreesRegressor(**cfg["MODELS"]["ML"]["ExtraTrees"])
-    elif cfg["MODELS"]["ML"]["TYPE"] == "Knn":
-        model = KNeighborsRegressor(**cfg["MODELS"]["ML"]["Knn"])
-    elif cfg["MODELS"]["ML"]["TYPE"] == "NuSVR":
-        model = NuSVR(**cfg["MODELS"]["ML"]["NuSVR"])
-    elif cfg["MODELS"]["ML"]["TYPE"] == "GradientBoosting":
-        model = GradientBoostingRegressor(**cfg["MODELS"]["ML"]["GradientBoosting"])
-
-    return model
+MODEL_DICT = {
+    "xgb": {
+        "model": xgboost.XGBClassifier(random_state=202),
+        "params": {
+            "min_child_weight": [i for i in range(1, 4)],
+            "gamma": [i * 0.5 for i in range(1, 4)],
+            # "subsample": [i * 0.2 for i in range(4, 6)],
+            # "colsample_bytree": [i * 0.2 for i in range(3, 6)],
+            "max_depth": [i for i in range(1, 5)],
+            "n_estimators": [
+                1,
+                2,
+                5,
+                8,
+                10,
+                20,
+                30,
+                40,
+                50,
+            ],
+            "learning_rate": [i * 0.02 for i in range(7, 11)],
+            "reg_lambda": [i * 0.1 + 1 for i in range(3, 7)],
+            # "eval_metric": "auc",
+        },
+    },
+    "rf": {
+        "model": RandomForestClassifier(random_state=202),
+        "params": {
+            "n_estimators": [10, 20, 30, 40, 50, 60, 80, 100],
+        },
+    },
+    "lr": {
+        "model": LogisticRegression(random_state=202),
+        "params": {
+            "C": [i * 0.1 for i in range(1, 30)],
+        },
+    },
+    "nusvc": {
+        "model": NuSVC(random_state=202, probability=True),
+        "params": {
+            "nu": [i * 0.1 for i in range(1, 11)],
+        },
+    },
+    "knn": {
+        "model": KNeighborsClassifier(),
+        "params": {
+            "n_neighbors": [i for i in range(2, 11)],
+        },
+    },
+    "qda": {
+        "model": QuadraticDiscriminantAnalysis(),
+        "params": {
+            "tol": [1.0e-4],
+        },
+    },
+    "GaussianNB": {
+        "model": GaussianNB(),
+        "params": {
+            "var_smoothing": [1e-9],
+        },
+    },
+}

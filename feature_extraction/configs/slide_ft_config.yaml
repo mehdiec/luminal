@@ -1,0 +1,8 @@
+file : /data/DeepLearning/mehdi/csv/patches.csv
+patch_size : 2000 #10000
+input_folder: /data/DeepLearning/mehdi/patch_csv/patch_csvs/0/2000/
+output_folder : /data/DeepLearning/mehdi/extract/
+image_folder  : /media/AprioricsSlides/
+image_extension  : .svs
+segmentation_folder : /media/AprioricsSlides/luminal/hovernet_outputs/json/  # ".svs"
+display : True

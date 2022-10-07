@@ -499,13 +499,12 @@ context.stroke(); -->
             }
         })
     }
-    function run() { }
 
     function run_temp(list_slide, slide_thum) {
         document.getElementById("main").style.display = "none"
 
         parent = document.getElementById("slide_g")
-        for (let i = 0; i < slide_thum.length; i++) {
+        for (let i = 0; i < list_slide.length; i++) {
             console.log(i)
             // < div class="gallery" >
             //     <img src="img_5terre.jpg" alt="Cinque Terre" width="600" height="400">
@@ -519,10 +518,10 @@ context.stroke(); -->
 
             let title = document.createElement("desc")
             title.textContent = list_slide[i]
-            let image = create_image(slide_thum[i])
-            image.addEventListener("click", (evt) => run(evt, list_slide, i))
+            // let image = create_image(slide_thum[i])
+            // image.addEventListener("click", (evt) => run(evt, list_slide, i))
             parent.appendChild(title)
-            parent.appendChild(image)
+            // parent.appendChild(image)
 
         }
     }

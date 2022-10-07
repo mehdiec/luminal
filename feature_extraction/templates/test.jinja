@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Atlas?</title>
+    <style type="text/css">
+        /* Three image containers (use 25% for four, and 50% for two, etc) */
+        .column {
+            float: left;
+
+            padding: 5px;
+        }
+
+        /* Clear floats after image containers */
+        .row::after {
+            content: "";
+            clear: both;
+            display: table;
+        }
+
+        figure {
+            border: 1px #cccccc solid;
+            padding: 4px;
+            margin: auto;
+        }
+
+        figcaption {
+
+            font-style: italic;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    {% for item in ft_atlas %}
+
+    <div class="row">
+        <h1>{{item}}</h1>
+
+
+
+
+
+        <div class="column">
+            <figure>
+                <img src={{ft_atlas[item][0]}} style="width:100%">
+                <figcaption>min {{item}}</figcaption>
+            </figure>
+        </div>
+        <div class="column">
+            <figure>
+                <img src={{ft_atlas[item][1]}} style="width:100%">
+                <figcaption>Q1 {{item}}</figcaption>
+            </figure>
+        </div>
+        <div class="column">
+            <figure>
+                <img src={{ft_atlas[item][2]}} style="width:100%">
+                <figcaption>mean {{item}}</figcaption>
+            </figure>
+        </div>
+        <div class="column">
+            <figure>
+                <img src={{ft_atlas[item][3]}} style="width:100%">
+                <figcaption>Q3 {{item}}</figcaption>
+            </figure>
+        </div>
+        <div class="column">
+            <figure>
+                <img src={{ft_atlas[item][4]}} style="width:100%">
+                <figcaption>max {{item}}</figcaption>
+            </figure>
+        </div>
+
+
+
+    </div>
+
+    {%endfor%}
+
+
+
+
+
+
+</body>
+
+</html>

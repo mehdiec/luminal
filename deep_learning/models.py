@@ -154,8 +154,27 @@ class ResNet(nn.Module):
 
 
 def build_model(
-    model_name, num_classes, freeze=False, pretrained=True, dropout=0, shape=512
+    model_name: str,
+    num_classes: int,
+    freeze: bool = False,
+    pretrained: bool = True,
+    dropout: int = 0,
+    shape: int = 512,
 ):
+    """_summary_
+
+    Args:
+        model_name (str): _description_
+        num_classes (int): _description_
+        freeze (bool, optional): _description_. Defaults to False.
+        pretrained (bool, optional): _description_. Defaults to True.
+        dropout (int, optional): _description_. Defaults to 0.
+        shape (int, optional): _description_. Defaults to 512.
+
+    Returns:
+        _type_: _description_
+    """
+
     model = None
 
     if model_name == "vanilla":
@@ -163,6 +182,24 @@ def build_model(
 
     elif model_name == "resnet":
         resnet = timm.create_model("resnet18", pretrained=pretrained)
+        infeat = resnet.fc.in_features
+        if dropout > 0:
+            resnet.fc = nn.Sequential(
+                nn.Dropout2d(dropout), nn.Linear(infeat, num_classes)
+            )
+        else:
+            resnet.fc = nn.Linear(infeat, num_classes)  # make the change
+
+        # isolate the feature blocks
+
+        if freeze:
+            for param in resnet.parameters():
+                param.requires_grad = False
+
+        # resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        model = resnet
+    elif model_name == "inception_v3":
+        resnet = timm.create_model("inception_v3", pretrained=pretrained)
         infeat = resnet.fc.in_features
         if dropout > 0:
             resnet.fc = nn.Sequential(

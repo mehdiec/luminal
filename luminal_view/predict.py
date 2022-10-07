@@ -116,21 +116,24 @@ def top(result, slide):
         count = 0
         for i, pred in enumerate(result["prediction_patch"]):
             if np.array(pred).argmax() == label:
+                out = np.array(
+                    slide.read_region(
+                        (result["pos_x"][i], result["pos_y"][i]),
+                        1,
+                        (512, 512),
+                    )
+                )
+                out = cv2.cvtColor(
+                    np.array(out),
+                    cv2.COLOR_RGB2BGR,
+                )  # grayscale
 
                 top[ID_TO_CLASS.get(label)].append(
                     {
                         "prediction": {
                             ID_TO_CLASS.get(i): pred[i] for i in range(len(pred))
                         },
-                        "image": export_img_cv2(
-                            np.array(
-                                slide.read_region(
-                                    (result["pos_x"][i], result["pos_y"][i]),
-                                    1,
-                                    (512, 512),
-                                )
-                            )
-                        ),
+                        "image": export_img_cv2(out),
                         "pos_x": result["pos_x"][i],
                         "pos_y": result["pos_y"][i],
                     }
@@ -189,7 +192,8 @@ def piechart(result):
     l = np.array(result["prediction_patch"])
     tt = []
     for x in l:
-        tt.append(x[:2])
+        if np.array(x).argmax() != 2:
+            tt.append(x[:2])
     tt = np.array(tt)
     max_tt = np.array(tt).argmax(1)
     nb_dict = np.count_nonzero(max_tt > 0.5)
@@ -351,6 +355,10 @@ def gradcam(x, y, slide_name, model, num_classes=3):
         y = dimy * y
 
     image = slide.read_region((int(x), int(y)), 1, (512, 512)).convert("RGB")
+    image = cv2.cvtColor(
+        np.array(image),
+        cv2.COLOR_RGB2BGR,
+    )  # grayscale
 
     # Define a transform to convert PIL
     # image to a Torch tensor
@@ -384,9 +392,9 @@ def gradcam(x, y, slide_name, model, num_classes=3):
         rgb_img = to_pil_image(input_tensor.squeeze() / 255)
         visualization = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
         img1 = visualization[:, :, [2, 1, 0]]
-        img2 = np.array(to_pil_image(input_tensor.squeeze()))
+        # img2 = np.array(to_pil_image(input_tensor.squeeze()))
         result_temp[ID_TO_CLASS.get(x)] = export_img_cv2(img1)
-    result_temp["patch raw"] = export_img_cv2(img2)
+    result_temp["patch raw"] = export_img_cv2(image)
     result_temp["prediction"] = {
         "Luminal A": prediction_list[0],
         "Luminal B": prediction_list[1],
@@ -405,7 +413,8 @@ def predict(model_name, file_name):
 
     # Init model
     model = models.build_model("resnet", num_classes=3)  # ,dropout=0.5)
-    model.load_state_dict(resnet, strict=True)
+    model = models.build_model("resnet50_", num_classes=3, dropout=0.5)
+    model.load_state_dict(resnet, strict=False)  # strict=True)
     model.to("cuda:0")
 
     _ = model.eval()
