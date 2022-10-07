@@ -1,6 +1,7 @@
 /.vscode
 /results
 /_garbo
+*/garbo
 */__pycache__
 */*/__pycache__
 *.ipynb
@@ -9,4 +10,8 @@
 *.csv
 *.png
 *.json
+*.pdf
 __pycache__
+*.npy
+*.txt
+*.jpeg
