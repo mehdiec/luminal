@@ -65,8 +65,8 @@ function run() {
         var count = 0
         for (const label in data.hist) {
             console.log(data.hist[label])
-            parent.appendChild(create_image(data.hist[label]))
-            // document.getElementById("hist" + count).src = "data:image/png;base64," + data.hist[label]
+            //parent.appendChild(create_image(data.hist[label]))
+            document.getElementById("hist" + count).src = "data:image/png;base64," + data.hist[label]
             count++
         }
 

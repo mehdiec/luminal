@@ -345,7 +345,7 @@ class SingleSlideInference(Dataset):
             level,
             psize=patch_size,
             interval=0,
-            slide_filters=[filter_thumbnail],
+            # slide_filters=[filter_thumbnail],
             thumb_size=2000,
         ):
             self.patches.append(patch)

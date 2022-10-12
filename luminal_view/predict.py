@@ -281,7 +281,7 @@ def heatmap(result, slide_name, resize_ratio=16):
         heatmap = cv2.resize(
             heatmap,
             (w * resize_ratio, h * resize_ratio),
-            # interpolation=cv2.INTER_NEAREST,
+            interpolation=cv2.INTER_NEAREST,
         )
         img = slide_he.get_thumbnail((heatmap.shape[1], heatmap.shape[0])).resize(
             (heatmap.shape[1], heatmap.shape[0])
@@ -354,6 +354,7 @@ def gradcam(x, y, slide_name, model, num_classes=3):
         x = dimx * x
         y = dimy * y
 
+    print(x, y)
     image = slide.read_region((int(x), int(y)), 1, (512, 512)).convert("RGB")
     image = cv2.cvtColor(
         np.array(image),
@@ -412,8 +413,8 @@ def predict(model_name, file_name):
     resnet = {k.replace("model.", ""): v for k, v in lesnet["state_dict"].items()}
 
     # Init model
-    model = models.build_model("resnet", num_classes=3)  # ,dropout=0.5)
-    model = models.build_model("resnet50_", num_classes=3, dropout=0.5)
+    model = models.build_model("resnet50_", num_classes=3)  # ,dropout=0.5)
+    model = models.build_model("resnet50_", num_classes=3, dropout=0.45)
     model.load_state_dict(resnet, strict=False)  # strict=True)
     model.to("cuda:0")
 
