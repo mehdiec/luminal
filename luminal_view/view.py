@@ -21,13 +21,14 @@ app = Flask(__name__)
 @app.route("/")
 def hello_world():
     list_slide = (
-        [p.split("/")[-1] for p in glob("/media/AprioricsSlides" + "/*" + "-1-??-1_*")]
-        + [p.split("/")[-1] for p in glob("/media/AprioricsSlides" + "/*" + "-1-?-1_*")]
+        [p.split("/")[-1] for p in glob("/media/AprioricsSlides" + "/*" + "-1_*")]
+        # + [p.split("/")[-1] for p in glob("/media/AprioricsSlides" + "/*" + "-1-?-1_*")]
         + [
             "VJ_cohorte_test/" + p.split("/")[-1]
             for p in glob("/media/AprioricsSlides/VJ_cohorte_test/*")
         ]
     )
+    # print(glob("/media/AprioricsSlid/es/*"))
     file_name = "/home/mehdi/code/luminal/test.json"
     model_list = [p for p in glob("/data/DeepLearning/mehdi/top_gear/*")]
     # with open(file_name, "r") as f:

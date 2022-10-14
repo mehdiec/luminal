@@ -10,7 +10,7 @@ from glob import glob
 from sklearn.neighbors import NearestNeighbors
 import yaml
 
-from feature_extraction.constante import COLORS, GEOMETRIES, LYMPHOCYTE, TEXTURES, TRASH
+from constante import COLORS, GEOMETRIES, LYMPHOCYTE, TEXTURES, TRASH
 
 
 def listify(hus):
@@ -193,7 +193,7 @@ if __name__ == "__main__":
 
     # df = pd.read_csv("/data/DeepLearning/mehdi/csv/chkp.csv")
     # FILTERING
-    file_name = "model/xgb_lyphocyte.pkl"
+    file_name = "models/xgb_lyphocyte.pkl"
 
     clf_rf = pickle.load(open(file_name, "rb"))
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     # df["prediction_nucleol"] = prediction
     # df["proba_nucleol"] = prediction_proba[:, 1]
 
-    file_name = "model/xgb_trash.pkl"
+    file_name = "models/xgb_trash.pkl"
     # pickle.dump(clf_rf, open(file_name, "wb"))
     clf_rf = pickle.load(open(file_name, "rb"))
     df_ft = df[TRASH]
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     df = df[df.prediction_trash == 0]
     df = df[df.tumor == 1]
 
-    columns = GEOMETRIES + COLORS + TEXTURES + ["dist_mean"]
+    columns = GEOMETRIES + COLORS + TEXTURES + ["dist_mean", "slide"]
 
     mask_lymph = df.prediction_lymph == 1  # | ((df.area < 350) & (df.area > 120))
     mask_tum = df.prediction_lymph == 0  # & ((df.area > 350))
@@ -426,8 +426,6 @@ if __name__ == "__main__":
     ]
 
     dff = dff.loc[:, ~dff.columns.duplicated()].copy()
-
-    dff = dff.drop([("slide", "")], axis=1)
 
     print(dff.head())
 
