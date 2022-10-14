@@ -1,4 +1,5 @@
 pathaia
+nptyping==1.4.4
 pillow==9.0.0
 numpy==1.21
 cucim==22.6.0
@@ -18,3 +19,7 @@ docker==5.0.3
 geopandas==0.10.2
 mahotas
 glob2
+seaborn==0.11.2
+timm
+grad-cam
+xgboost
